@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { api } from '../lib/api'
 import { inputClass } from '../lib/form'
@@ -22,6 +22,7 @@ export default function BookList() {
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
+  const [loading, setLoading] = useState(true)
 
   // Đổi bộ lọc/từ khóa/sắp xếp thì về trang 1; giữ nguyên các tham số khác trong URL
   const update = (changes) =>
@@ -38,16 +39,25 @@ export default function BookList() {
       { replace: true },
     )
 
+  // Giá trị q mà chính ô tìm kiếm đã đẩy lên URL, để phân biệt với thay đổi URL từ bên ngoài
+  const pushedQ = useRef(q)
+
   // Ô tìm kiếm: debounce trước khi cập nhật URL
   useEffect(() => {
     if (search.trim() === q) return
-    const timer = setTimeout(() => update({ q: search.trim() }), DEBOUNCE_MS)
+    const timer = setTimeout(() => {
+      pushedQ.current = search.trim()
+      update({ q: search.trim() })
+    }, DEBOUNCE_MS)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search])
 
-  // URL đổi từ bên ngoài (back/forward): đồng bộ lại ô tìm kiếm
+  // URL đổi từ bên ngoài (back/forward): đồng bộ lại ô tìm kiếm. Thay đổi do chính ô này đẩy lên thì bỏ qua,
+  // nếu không sẽ ghi đè các ký tự người dùng đang gõ tiếp
   useEffect(() => {
+    if (q === pushedQ.current) return
+    pushedQ.current = q
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSearch(q)
   }, [q])
@@ -67,16 +77,23 @@ export default function BookList() {
     let ignore = false
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setError('')
+    setLoading(true)
     const query = { sort, page, ...(q && { q }), ...(categoryId && { categoryId }) }
     api
       .get('/books', { params: query })
       .then(({ data }) => {
         if (ignore) return
         setResult(data)
+        setLoading(false)
         // Server đưa về trang cuối có dữ liệu: cập nhật URL cho khớp
         if (data.page !== page) update({ page: data.page })
       })
-      .catch(() => !ignore && setError('Không thể tải danh sách sách, vui lòng thử lại'))
+      .catch(() => {
+        if (ignore) return
+        setLoading(false)
+        setResult(null) // bỏ kết quả cũ để không hiện dữ liệu không còn khớp bộ lọc
+        setError('Không thể tải danh sách sách, vui lòng thử lại')
+      })
     return () => {
       ignore = true
     }
@@ -138,7 +155,7 @@ export default function BookList() {
       {!error && result && items.length === 0 && <p role="status">Không tìm thấy sách phù hợp</p>}
       {!error && items.length > 0 && (
         <>
-          <table className="w-full text-left">
+          <table aria-busy={loading} className={`w-full text-left ${loading ? 'opacity-60' : ''}`}>
             <thead>
               <tr className="border-b border-slate-300 text-sm text-slate-600">
                 <th className="py-2 pr-3">Tên sách</th>
@@ -165,7 +182,7 @@ export default function BookList() {
           <nav aria-label="Phân trang" className="mt-4 flex items-center justify-between">
             <button
               type="button"
-              disabled={result.page <= 1}
+              disabled={loading || result.page <= 1}
               onClick={() => update({ page: result.page - 1 })}
               className="rounded border border-slate-300 px-4 py-2 disabled:opacity-40"
             >
@@ -174,7 +191,7 @@ export default function BookList() {
             <span>Trang {result.page} / {result.totalPages} ({result.total} sách)</span>
             <button
               type="button"
-              disabled={result.page >= result.totalPages}
+              disabled={loading || result.page >= result.totalPages}
               onClick={() => update({ page: result.page + 1 })}
               className="rounded border border-slate-300 px-4 py-2 disabled:opacity-40"
             >

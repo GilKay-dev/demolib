@@ -85,7 +85,7 @@ Keep this section current (the `/wrap-up` command updates it). Only level 1–2 
 - `client/` — React + Vite frontend (`src/`, tests next to components, `src/test/setup.js`)
 - `server/` — Express backend; `src/app.js` (app, exported for Supertest), `src/index.js` (listen), `src/lib/prisma.js`
 - `server/prisma/schema.prisma` + `server/prisma.config.ts` — Prisma 7 schema mirroring the migrations (no `prisma migrate`; partial/expression indexes, CHECKs, triggers live only in SQL)
-- `server/src/routes/`, `validators/`, `middleware/validate.js`, `middleware/auth.js` (`authenticate`, `requireRole`), `lib/token.js`, `lib/password.js` — route modules (+ tests), Joi schemas, validation + JWT auth/role middleware, token signing, bcrypt helpers
+- `server/src/routes/`, `validators/`, `middleware/validate.js`, `middleware/auth.js` (`authenticate`, `requireRole`), `middleware/rateLimit.js` (login / password-change limiters), `lib/token.js` (JWT carries a password fingerprint `pv`, so a password change revokes old tokens), `lib/password.js`, `test/auth.js` (token helper for tests) — route modules (+ tests), Joi schemas, validation + JWT auth/role middleware, token signing, bcrypt helpers
 - `client/src/pages/`, `components/` (`Field`, `RequireAuth`), `context/AuthContext.jsx`, `lib/api.js` — pages (+ tests), shared form/route-guard components, auth state (token in localStorage; 401 → logout), Axios instance
 - `.claude/commands/` — project slash commands (commit, git-branch, merge, pull, push, wrap-up, learn-by-mistake, new-project)
 - `.mcp.json` — MCP server config (Supabase, Playwright, Postman, Vercel)

@@ -1,5 +1,7 @@
 import { Router } from "express";
+import { signToken } from "../lib/token.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
+import { passwordLimiter } from "../middleware/rateLimit.js";
 import { validate } from "../middleware/validate.js";
 import { comparePassword, hashPassword } from "../lib/password.js";
 import { prisma } from "../lib/prisma.js";
@@ -45,7 +47,7 @@ meRouter.put("/", validate(updateProfileSchema), async (req, res) => {
   res.json({ message: "Cập nhật thành công", user: toProfile(user) });
 });
 
-meRouter.put("/password", validate(changePasswordSchema), async (req, res) => {
+meRouter.put("/password", passwordLimiter, validate(changePasswordSchema), async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   const { passwordHash } = await prisma.user.findUnique({ where: { id: req.user.id }, select: { passwordHash: true } });
   if (!(await comparePassword(currentPassword, passwordHash))) {
@@ -53,6 +55,8 @@ meRouter.put("/password", validate(changePasswordSchema), async (req, res) => {
       .status(400)
       .json({ message: "Mật khẩu hiện tại không đúng", errors: { currentPassword: "Mật khẩu hiện tại không đúng" } });
   }
-  await prisma.user.update({ where: { id: req.user.id }, data: { passwordHash: await hashPassword(newPassword) } });
-  res.json({ message: "Đổi mật khẩu thành công" });
+  const newHash = await hashPassword(newPassword);
+  await prisma.user.update({ where: { id: req.user.id }, data: { passwordHash: newHash } });
+  // Mọi token cũ (kể cả của phiên này) hết hiệu lực; cấp token mới để người dùng hiện tại không bị đăng xuất
+  res.json({ message: "Đổi mật khẩu thành công", token: signToken({ ...req.user, passwordHash: newHash }) });
 });

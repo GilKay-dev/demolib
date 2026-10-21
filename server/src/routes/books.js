@@ -25,8 +25,10 @@ const toBook = (b) => ({
 const PAGE_SIZE = 10;
 const SORTS = ["name", "year", "popular"];
 const MAX_QUERY_LENGTH = 100;
-// "Phổ biến" = số đơn mượn đã được nhân viên xác nhận
-const CONFIRMED = ["BORROWING", "OVERDUE", "RETURNED"];
+// "Phổ biến" = số đơn mượn đã được nhân viên xác nhận (BORROWING, OVERDUE, RETURNED; dùng trực tiếp trong SQL bên dưới)
+
+// Prisma không escape ký tự đại diện của LIKE, nên '%', '_' và '\' trong từ khóa phải tự escape để khớp theo nghĩa đen
+const escapeLike = (s) => s.replace(/[\\%_]/g, "\\$&");
 
 const toListItem = (b) => ({
   id: b.id,
@@ -66,13 +68,14 @@ booksRouter.get("/", async (req, res) => {
     categoryId = found?.id ?? null;
   }
 
+  const pattern = q ? escapeLike(q) : null;
   const where = {
     deletedAt: null,
     ...(categoryId && { categoryId }),
-    ...(q && {
+    ...(pattern && {
       OR: [
-        { title: { contains: q, mode: "insensitive" } },
-        { author: { contains: q, mode: "insensitive" } },
+        { title: { contains: pattern, mode: "insensitive" } },
+        { author: { contains: pattern, mode: "insensitive" } },
       ],
     }),
   };
@@ -85,18 +88,19 @@ booksRouter.get("/", async (req, res) => {
 
   let books;
   if (sort === "popular") {
-    // Prisma không đếm có điều kiện theo quan hệ khi sắp xếp, nên tính độ phổ biến riêng rồi cắt trang
-    const all = await prisma.book.findMany({ where, select: { id: true, title: true } });
-    const counts = await prisma.borrow.groupBy({
-      by: ["bookId"],
-      where: { bookId: { in: all.map((b) => b.id) }, status: { in: CONFIRMED } },
-      _count: { _all: true },
-    });
-    const popularity = new Map(counts.map((c) => [c.bookId, c._count._all]));
-    const pageIds = all
-      .sort((a, b) => (popularity.get(b.id) ?? 0) - (popularity.get(a.id) ?? 0) || a.title.localeCompare(b.title, "vi") || a.id - b.id)
-      .slice(skip, skip + PAGE_SIZE)
-      .map((b) => b.id);
+    // Sắp xếp theo số đơn mượn đã xác nhận ngay trong SQL (chỉ lấy đúng một trang), hòa thì theo tên như sort=name
+    const like = pattern && `%${pattern}%`;
+    const ranked = await prisma.$queryRaw`
+      SELECT b.id
+      FROM books b
+      LEFT JOIN borrows w ON w.book_id = b.id AND w.status IN ('BORROWING', 'OVERDUE', 'RETURNED')
+      WHERE b.deleted_at IS NULL
+        AND (${categoryId}::int IS NULL OR b.category_id = ${categoryId}::int)
+        AND (${like}::text IS NULL OR b.title ILIKE ${like}::text OR b.author ILIKE ${like}::text)
+      GROUP BY b.id
+      ORDER BY COUNT(w.id) DESC, b.title ASC, b.id ASC
+      LIMIT ${PAGE_SIZE} OFFSET ${skip}`;
+    const pageIds = ranked.map((r) => r.id);
     const rows = await prisma.book.findMany({ where: { id: { in: pageIds } }, select: listSelect });
     const byId = new Map(rows.map((b) => [b.id, b]));
     books = pageIds.map((id) => byId.get(id)).filter(Boolean);

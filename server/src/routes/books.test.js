@@ -1,4 +1,4 @@
-import jwt from "jsonwebtoken";
+import { authFor, fakeUser } from "../test/auth.js";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { isValidIsbn, normalizeIsbn } from "../lib/isbn.js";
@@ -10,7 +10,7 @@ vi.mock("../lib/prisma.js", () => {
       user: { findUnique: vi.fn() },
       book: { findFirst: vi.fn(), count: vi.fn(), findMany: vi.fn() },
       category: { findFirst: vi.fn() },
-      borrow: { groupBy: vi.fn() },
+      $queryRaw: vi.fn(),
       $transaction: vi.fn((fn) => fn(tx)),
       tx,
     },
@@ -21,7 +21,7 @@ process.env.JWT_SECRET = "test-secret";
 const { prisma } = await import("../lib/prisma.js");
 const { app } = await import("../app.js");
 
-const auth = () => ({ Authorization: `Bearer ${jwt.sign({ sub: 1 }, "test-secret")}` });
+const auth = () => authFor();
 const thisYear = new Date().getFullYear();
 const valid = {
   title: "  Clean Code ",
@@ -35,7 +35,7 @@ const valid = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  prisma.user.findUnique.mockResolvedValue({ id: 1, role: "LIBRARIAN", status: "ACTIVE" });
+  prisma.user.findUnique.mockResolvedValue(fakeUser());
   prisma.book.findFirst.mockResolvedValue(null);
   prisma.tx.$queryRaw.mockResolvedValue([{ id: 3 }]);
   prisma.tx.book.create.mockImplementation(async ({ data }) => ({ id: 11, ...data }));
@@ -55,7 +55,7 @@ describe("POST /api/books access", () => {
   });
 
   it.each(["READER", "ADMIN"])("returns 403 for a %s", async (role) => {
-    prisma.user.findUnique.mockResolvedValue({ id: 1, role, status: "ACTIVE" });
+    prisma.user.findUnique.mockResolvedValue(fakeUser({ role }));
     expect((await request(app).post("/api/books").set(auth()).send(valid)).status).toBe(403);
     expect(prisma.tx.book.create).not.toHaveBeenCalled();
   });
@@ -205,7 +205,7 @@ describe("GET /api/books (public list)", () => {
     prisma.book.count.mockResolvedValue(25);
     prisma.book.findMany.mockResolvedValue([row(1), row(2)]);
     prisma.category.findFirst.mockResolvedValue({ id: 3 });
-    prisma.borrow.groupBy.mockResolvedValue([]);
+    prisma.$queryRaw.mockResolvedValue([]);
   });
 
   it("needs no login and returns the listed fields plus paging info", async () => {
@@ -298,31 +298,52 @@ describe("GET /api/books (public list)", () => {
   });
 
   describe("sort=popular", () => {
-    it("orders by confirmed borrow count desc, then title, and pages the result", async () => {
-      const all = [1, 2, 3, 4].map((id) => ({ id, title: `Sách ${id}` }));
+    const sqlOf = () => prisma.$queryRaw.mock.calls[0][0].join("?");
+    const paramsOf = () => prisma.$queryRaw.mock.calls[0].slice(1);
+
+    it("ranks in SQL by confirmed borrow count, then title, and keeps the order of the ranked ids", async () => {
       prisma.book.count.mockResolvedValue(4);
-      prisma.book.findMany.mockResolvedValueOnce(all).mockResolvedValueOnce([row(3), row(1), row(2), row(4)]);
-      prisma.borrow.groupBy.mockResolvedValue([
-        { bookId: 3, _count: { _all: 9 } },
-        { bookId: 2, _count: { _all: 1 } },
-        { bookId: 1, _count: { _all: 1 } },
-      ]);
+      prisma.$queryRaw.mockResolvedValue([{ id: 3 }, { id: 1 }, { id: 2 }, { id: 4 }]);
+      prisma.book.findMany.mockResolvedValue([row(1), row(2), row(3), row(4)]); // DB returns them unordered
       const res = await request(app).get("/api/books?sort=popular");
       expect(res.body.items.map((b) => b.id)).toEqual([3, 1, 2, 4]);
-      expect(prisma.borrow.groupBy.mock.calls[0][0].where).toEqual({
-        bookId: { in: [1, 2, 3, 4] },
-        status: { in: ["BORROWING", "OVERDUE", "RETURNED"] },
-      });
+      expect(sqlOf()).toMatch(/'BORROWING', 'OVERDUE', 'RETURNED'/);
+      expect(sqlOf()).toMatch(/ORDER BY COUNT\(w\.id\) DESC, b\.title ASC, b\.id ASC/);
+      expect(prisma.book.findMany.mock.calls[0][0].where).toEqual({ id: { in: [3, 1, 2, 4] } });
     });
 
-    it("applies the same search/category filter and returns page 2 of the ranking", async () => {
-      const all = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, title: `S${String(i + 1).padStart(2, "0")}` }));
+    it("fetches only one page in SQL and passes filters as parameters, never loading all books", async () => {
       prisma.book.count.mockResolvedValue(12);
-      prisma.book.findMany.mockResolvedValueOnce(all).mockResolvedValueOnce([row(11), row(12)]);
+      prisma.$queryRaw.mockResolvedValue([{ id: 11 }, { id: 12 }]);
+      prisma.book.findMany.mockResolvedValue([row(11), row(12)]);
       const res = await request(app).get("/api/books?sort=popular&page=2&q=s&categoryId=3");
-      expect(prisma.book.findMany.mock.calls[0][0].where).toMatchObject({ categoryId: 3, deletedAt: null });
-      expect(prisma.book.findMany.mock.calls[1][0].where).toEqual({ id: { in: [11, 12] } });
       expect(res.body.items.map((b) => b.id)).toEqual([11, 12]);
+      // [categoryId, categoryId, like, like, like, limit, offset]
+      expect(paramsOf()).toEqual([3, 3, "%s%", "%s%", "%s%", 10, 10]);
+      expect(sqlOf()).not.toMatch(/s%|3/); // giá trị người dùng không nằm trong chuỗi SQL
+      expect(prisma.book.findMany).toHaveBeenCalledTimes(1); // chỉ lấy dữ liệu của trang, không nạp toàn bộ sách
+    });
+
+    it("passes null parameters when no filter is set", async () => {
+      prisma.book.count.mockResolvedValue(1);
+      await request(app).get("/api/books?sort=popular");
+      expect(paramsOf()).toEqual([null, null, null, null, null, 10, 0]);
+    });
+  });
+
+  describe("LIKE wildcards in the search term", () => {
+    it.each([
+      ["50%", "50\\%"],
+      ["a_b", "a\\_b"],
+      ["back\\slash", "back\\\\slash"],
+    ])("escapes %j for the Prisma contains filter", async (input, escaped) => {
+      await request(app).get("/api/books").query({ q: input });
+      expect(prisma.book.findMany.mock.calls[0][0].where.OR[0].title.contains).toBe(escaped);
+    });
+
+    it("escapes the pattern passed to the SQL ILIKE for sort=popular too", async () => {
+      await request(app).get("/api/books").query({ q: "100%", sort: "popular" });
+      expect(prisma.$queryRaw.mock.calls[0].slice(1)).toContain("%100\\%%");
     });
   });
 });

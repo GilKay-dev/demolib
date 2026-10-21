@@ -82,6 +82,47 @@ describe('BookList', () => {
     await waitFor(() => expect(lastBooksCall()).toEqual({ q: 'abc', sort: 'name', page: 1 }))
   })
 
+  it('keeps what the user keeps typing after the debounced URL update', async () => {
+    const user = userEvent.setup()
+    await renderAt()
+    const box = screen.getByLabelText('Tìm theo tên sách hoặc tác giả')
+    await user.type(box, 'abc')
+    await waitFor(() => expect(screen.getByTestId('url')).toHaveTextContent('?q=abc'))
+    await user.type(box, 'd')
+    expect(box).toHaveValue('abcd')
+    await waitFor(() => expect(screen.getByTestId('url')).toHaveTextContent('?q=abcd'))
+    expect(box).toHaveValue('abcd')
+  })
+
+  it('disables paging and marks the table busy while a page is loading', async () => {
+    const user = userEvent.setup()
+    await renderAt()
+    let release
+    api.get.mockImplementation(async (url) => {
+      if (url === '/categories') return { data: [] }
+      await new Promise((r) => { release = r })
+      return { data: { ...page1, page: 2 } }
+    })
+    await user.click(screen.getByRole('button', { name: 'Trang sau' }))
+    expect(screen.getByRole('button', { name: 'Trang sau' })).toBeDisabled()
+    expect(screen.getByRole('table')).toHaveAttribute('aria-busy', 'true')
+    release()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Trang sau' })).toBeEnabled())
+    expect(screen.getByRole('table')).toHaveAttribute('aria-busy', 'false')
+  })
+
+  it('drops the previous results when a reload fails, so stale rows are not shown', async () => {
+    const user = userEvent.setup()
+    await renderAt()
+    api.get.mockImplementation(async (url) => {
+      if (url === '/categories') return { data: [] }
+      throw new Error('x')
+    })
+    await user.selectOptions(screen.getByLabelText('Sắp xếp'), 'year')
+    expect(await screen.findByText('Không thể tải danh sách sách, vui lòng thử lại')).toBeInTheDocument()
+    expect(screen.queryByText('Sách 1')).not.toBeInTheDocument()
+  })
+
   it('filters by category and resets the page', async () => {
     const user = userEvent.setup()
     await renderAt('/books?page=2')
