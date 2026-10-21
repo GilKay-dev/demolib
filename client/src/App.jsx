@@ -3,6 +3,7 @@ import RequireAuth from './components/RequireAuth'
 import { useAuth } from './context/AuthContext'
 import BookCreate from './pages/BookCreate'
 import BookDetail from './pages/BookDetail'
+import BookEdit from './pages/BookEdit'
 import BookList from './pages/BookList'
 import Categories from './pages/Categories'
 import Login from './pages/Login'
@@ -52,6 +53,14 @@ function App() {
         element={
           <RequireAuth roles={['LIBRARIAN']}>
             <BookCreate />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/books/:id/edit"
+        element={
+          <RequireAuth roles={['LIBRARIAN']}>
+            <BookEdit />
           </RequireAuth>
         }
       />

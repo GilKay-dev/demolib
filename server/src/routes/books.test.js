@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { isValidIsbn, normalizeIsbn } from "../lib/isbn.js";
 
 vi.mock("../lib/prisma.js", () => {
-  const tx = { $queryRaw: vi.fn(), book: { create: vi.fn() } };
+  const tx = { $queryRaw: vi.fn(), book: { create: vi.fn(), update: vi.fn() }, borrow: { count: vi.fn() } };
   return {
     prisma: {
       user: { findUnique: vi.fn() },
@@ -419,5 +419,115 @@ describe("GET /api/books/:id (public detail)", () => {
   it.each(["abc", "0", "99999999999"])("returns 404 for id %s without querying", async (id) => {
     expect((await request(app).get(`/api/books/${id}`)).status).toBe(404);
     expect(prisma.book.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe("PUT /api/books/:id", () => {
+  beforeEach(() => {
+    // lần 1: khóa dòng sách (đang mượn 2); lần 2: khóa thể loại
+    prisma.tx.$queryRaw.mockResolvedValueOnce([{ borrowed_quantity: 2 }]).mockResolvedValueOnce([{ id: 3 }]);
+    prisma.tx.book.update.mockImplementation(async ({ data }) => ({ id: 7, borrowedQuantity: 2, ...data }));
+  });
+
+  it("returns 401 without a token and 403 for non-librarians", async () => {
+    expect((await request(app).put("/api/books/7").send(valid)).status).toBe(401);
+    prisma.user.findUnique.mockResolvedValue(fakeUser({ role: "READER" }));
+    expect((await request(app).put("/api/books/7").set(auth()).send(valid)).status).toBe(403);
+    expect(prisma.tx.book.update).not.toHaveBeenCalled();
+  });
+
+  it("updates the book and keeps available = quantity - borrowed", async () => {
+    const res = await request(app).put("/api/books/7").set(auth()).send(valid);
+    expect(res.status).toBe(200);
+    expect(res.body.message).toBe("Cập nhật sách thành công");
+    const call = prisma.tx.book.update.mock.calls[0][0];
+    expect(call.where).toEqual({ id: 7 });
+    expect(call.data).toMatchObject({ title: "Clean Code", isbn: "9780306406157", totalQuantity: 5, availableQuantity: 3 });
+    expect(prisma.book.findFirst.mock.calls[0][0].where).toMatchObject({ isbn: "9780306406157", id: { not: 7 } });
+  });
+
+  it("rejects a quantity below the borrowed count", async () => {
+    const res = await request(app).put("/api/books/7").set(auth()).send({ ...valid, quantity: 1 });
+    expect(res.status).toBe(400);
+    expect(res.body.errors.quantity).toContain("2");
+    expect(prisma.tx.book.update).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for invalid fields without touching the database", async () => {
+    const res = await request(app).put("/api/books/7").set(auth()).send({ ...valid, title: "" });
+    expect(res.status).toBe(400);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 when another book has the ISBN", async () => {
+    prisma.book.findFirst.mockResolvedValue({ id: 8 });
+    const res = await request(app).put("/api/books/7").set(auth()).send(valid);
+    expect(res.status).toBe(409);
+    expect(res.body.errors.isbn).toBeDefined();
+  });
+
+  it("returns 409 when the unique index catches a concurrent ISBN", async () => {
+    prisma.tx.book.update.mockRejectedValue(Object.assign(new Error("dup"), { code: "P2002", meta: { target: ["isbn"] } }));
+    expect((await request(app).put("/api/books/7").set(auth()).send(valid)).status).toBe(409);
+  });
+
+  it("returns 400 when the category is gone", async () => {
+    prisma.tx.$queryRaw.mockReset();
+    prisma.tx.$queryRaw.mockResolvedValueOnce([{ borrowed_quantity: 2 }]).mockResolvedValueOnce([]);
+    const res = await request(app).put("/api/books/7").set(auth()).send(valid);
+    expect(res.status).toBe(400);
+    expect(res.body.errors.categoryId).toBeDefined();
+  });
+
+  it("returns 404 for a missing book", async () => {
+    prisma.tx.$queryRaw.mockReset();
+    prisma.tx.$queryRaw.mockResolvedValueOnce([]);
+    expect((await request(app).put("/api/books/7").set(auth()).send(valid)).status).toBe(404);
+  });
+
+  it("returns 404 for a bad id without a transaction", async () => {
+    expect((await request(app).put("/api/books/abc").set(auth()).send(valid)).status).toBe(404);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("DELETE /api/books/:id", () => {
+  beforeEach(() => {
+    prisma.tx.$queryRaw.mockReset();
+    prisma.tx.$queryRaw.mockResolvedValue([{ id: 7 }]);
+    prisma.tx.borrow.count.mockResolvedValue(0);
+    prisma.tx.book.update.mockResolvedValue({});
+  });
+
+  it("returns 401 without a token and 403 for non-librarians", async () => {
+    expect((await request(app).delete("/api/books/7")).status).toBe(401);
+    prisma.user.findUnique.mockResolvedValue(fakeUser({ role: "ADMIN" }));
+    expect((await request(app).delete("/api/books/7").set(auth())).status).toBe(403);
+    expect(prisma.tx.book.update).not.toHaveBeenCalled();
+  });
+
+  it("soft-deletes a book with no active borrows", async () => {
+    const res = await request(app).delete("/api/books/7").set(auth());
+    expect(res.status).toBe(200);
+    expect(prisma.tx.borrow.count.mock.calls[0][0].where).toEqual({
+      bookId: 7,
+      status: { in: ["PENDING", "BORROWING", "OVERDUE"] },
+    });
+    const call = prisma.tx.book.update.mock.calls[0][0];
+    expect(call.where).toEqual({ id: 7 });
+    expect(call.data.deletedAt).toBeInstanceOf(Date);
+  });
+
+  it("returns 409 while the book has active borrows", async () => {
+    prisma.tx.borrow.count.mockResolvedValue(1);
+    const res = await request(app).delete("/api/books/7").set(auth());
+    expect(res.status).toBe(409);
+    expect(prisma.tx.book.update).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for a missing book or bad id", async () => {
+    prisma.tx.$queryRaw.mockResolvedValue([]);
+    expect((await request(app).delete("/api/books/7").set(auth())).status).toBe(404);
+    expect((await request(app).delete("/api/books/abc").set(auth())).status).toBe(404);
   });
 });

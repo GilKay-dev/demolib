@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
 import { api } from '../lib/api'
+import { useAuth } from '../context/AuthContext'
 
 const STATUS_LABELS = { BORROWING: 'Đang mượn', OVERDUE: 'Quá hạn', RETURNED: 'Đã trả' }
 
@@ -13,6 +14,25 @@ export default function BookDetail() {
   const [error, setError] = useState('')
   const [notFound, setNotFound] = useState(false)
   const [attempt, setAttempt] = useState(0)
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+  const navigate = useNavigate()
+  const isLibrarian = useAuth()?.user?.role === 'LIBRARIAN'
+
+  const remove = async () => {
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await api.delete(`/books/${id}`)
+      navigate('/books')
+    } catch (err) {
+      setDeleteError(err.response?.data?.message ?? 'Không thể xóa sách, vui lòng thử lại')
+      setConfirming(false)
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   useEffect(() => {
     let ignore = false
@@ -67,6 +87,33 @@ export default function BookDetail() {
             <dt className="text-slate-600">Mô tả</dt>
             <dd className="whitespace-pre-line">{book.description}</dd>
           </dl>
+
+          {isLibrarian && (
+            <div className="mb-6">
+              <div className="flex gap-3">
+                <Link to={`/books/${book.id}/edit`} className="rounded border border-slate-300 px-4 py-2">Sửa</Link>
+                {!confirming && (
+                  <button type="button" onClick={() => setConfirming(true)} className="rounded border border-red-300 px-4 py-2 text-red-700">
+                    Xóa
+                  </button>
+                )}
+              </div>
+              {confirming && (
+                <div role="alertdialog" aria-label="Xác nhận xóa sách" className="mt-3 rounded border border-red-300 bg-red-50 p-3">
+                  <p>Bạn có chắc muốn xóa sách "{book.title}"?</p>
+                  <div className="mt-2 flex gap-3">
+                    <button type="button" onClick={remove} disabled={deleting} className="rounded bg-red-700 px-4 py-2 text-white disabled:opacity-50">
+                      Xác nhận xóa
+                    </button>
+                    <button type="button" onClick={() => setConfirming(false)} disabled={deleting} className="rounded border border-slate-300 px-4 py-2">
+                      Hủy
+                    </button>
+                  </div>
+                </div>
+              )}
+              {deleteError && <p role="alert" className="mt-2 text-red-600">{deleteError}</p>}
+            </div>
+          )}
 
           {book.borrowHistory && (
             <section aria-labelledby="history">
