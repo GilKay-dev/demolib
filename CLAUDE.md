@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Communication rules
+
+- Trả lời bằng tiếng Việt có dấu, ngắn gọn, dễ hiểu.
+- Không dùng quá nhiều thuật ngữ kỹ thuật chi tiết, trừ khi người dùng chỉ định.
+
 ## Project status
 
 Stage 3 in progress (npm workspaces `client` + `server`). Done: 2.1.1 register, 2.1.2 login; 2.1.3 profile, 2.2.1 categories, 2.2.2 add book (merged); 2.2.3 book list (branch `feature/book-list`). Track per-feature status in the PRD's "Trạng thái" column.
