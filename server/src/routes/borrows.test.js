@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../lib/prisma.js", () => {
   const db = () => ({
     $queryRaw: vi.fn(),
-    book: { findFirst: vi.fn() },
-    borrow: { findFirst: vi.fn(), count: vi.fn(), create: vi.fn() },
+    book: { findFirst: vi.fn(), update: vi.fn() },
+    borrow: { findFirst: vi.fn(), count: vi.fn(), create: vi.fn(), findMany: vi.fn(), update: vi.fn() },
     fine: { findFirst: vi.fn() },
   });
   const tx = db();
@@ -148,5 +148,82 @@ describe("GET /api/borrows/eligibility", () => {
   it("returns 404 for a missing book", async () => {
     prisma.book.findFirst.mockResolvedValue(null);
     expect((await request(app).get("/api/borrows/eligibility?bookId=4").set(auth())).status).toBe(404);
+  });
+});
+
+describe("staff handling of borrow requests (2.3.2)", () => {
+  const staff = () => authFor(fakeUser({ id: 2, role: "LIBRARIAN" }));
+  const asStaff = () => prisma.user.findUnique.mockResolvedValue(fakeUser({ id: 2, role: "LIBRARIAN" }));
+  const pendingRow = { id: 5, book_id: 4, requested_days: 20, status: "PENDING" };
+
+  beforeEach(() => {
+    asStaff();
+    prisma.tx.$queryRaw.mockResolvedValueOnce([pendingRow]).mockResolvedValueOnce([{ available_quantity: 2 }]);
+    prisma.tx.borrow.update.mockImplementation(async ({ data }) => ({ id: 5, ...data }));
+  });
+
+  it.each([
+    ["get", "/api/borrows"],
+    ["post", "/api/borrows/5/confirm"],
+    ["post", "/api/borrows/5/reject"],
+  ])("%s %s is forbidden for readers", async (method, url) => {
+    prisma.user.findUnique.mockResolvedValue(fakeUser({ id: 7, role: "READER" }));
+    expect((await request(app)[method](url).set(auth()).send({ reason: "x" })).status).toBe(403);
+  });
+
+  it("lists pending requests oldest first", async () => {
+    prisma.borrow.findMany.mockResolvedValue([{ id: 5 }]);
+    const res = await request(app).get("/api/borrows").set(staff());
+    expect(res.body).toEqual({ items: [{ id: 5 }] });
+    const arg = prisma.borrow.findMany.mock.calls[0][0];
+    expect(arg.where.status).toBe("PENDING");
+    expect(arg.orderBy[0]).toEqual({ createdAt: "asc" });
+  });
+
+  it("confirms: sets dates, moves one copy to borrowed", async () => {
+    const res = await request(app).post("/api/borrows/5/confirm").set(staff());
+    expect(res.status).toBe(200);
+    const data = prisma.tx.borrow.update.mock.calls[0][0].data;
+    expect(data).toMatchObject({ status: "BORROWING", processedById: 2 });
+    expect((data.dueDate - data.borrowDate) / 86400000).toBe(20);
+    expect(prisma.tx.book.update.mock.calls[0][0]).toEqual({
+      where: { id: 4 },
+      data: { availableQuantity: { decrement: 1 }, borrowedQuantity: { increment: 1 } },
+    });
+  });
+
+  it("returns 409 when the request was already handled", async () => {
+    prisma.tx.$queryRaw.mockReset().mockResolvedValueOnce([{ ...pendingRow, status: "BORROWING" }]);
+    expect((await request(app).post("/api/borrows/5/confirm").set(staff())).status).toBe(409);
+    expect(prisma.tx.book.update).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 when no copy is left", async () => {
+    prisma.tx.$queryRaw.mockReset().mockResolvedValueOnce([pendingRow]).mockResolvedValueOnce([{ available_quantity: 0 }]);
+    expect((await request(app).post("/api/borrows/5/confirm").set(staff())).status).toBe(409);
+    expect(prisma.tx.borrow.update).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for an unknown request", async () => {
+    prisma.tx.$queryRaw.mockReset().mockResolvedValueOnce([]);
+    expect((await request(app).post("/api/borrows/5/confirm").set(staff())).status).toBe(404);
+    expect((await request(app).post("/api/borrows/abc/confirm").set(staff())).status).toBe(404);
+  });
+
+  it("rejects with a reason and leaves inventory alone", async () => {
+    const res = await request(app).post("/api/borrows/5/reject").set(staff()).send({ reason: "  Hết sách " });
+    expect(res.status).toBe(200);
+    expect(prisma.tx.borrow.update.mock.calls[0][0].data).toMatchObject({ status: "REJECTED", rejectReason: "Hết sách", processedById: 2 });
+    expect(prisma.tx.book.update).not.toHaveBeenCalled();
+  });
+
+  it.each([{}, { reason: "   " }, { reason: "x".repeat(256) }])("requires a valid reason: %j", async (body) => {
+    expect((await request(app).post("/api/borrows/5/reject").set(staff()).send(body)).status).toBe(400);
+    expect(prisma.tx.borrow.update).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 when rejecting an already handled request", async () => {
+    prisma.tx.$queryRaw.mockReset().mockResolvedValueOnce([{ ...pendingRow, status: "REJECTED" }]);
+    expect((await request(app).post("/api/borrows/5/reject").set(staff()).send({ reason: "x" })).status).toBe(409);
   });
 });

@@ -18,3 +18,11 @@ export const createBorrowSchema = Joi.object({
     "number.max": "Thời hạn từ 1 đến 30 ngày",
   }),
 });
+
+export const rejectBorrowSchema = Joi.object({
+  reason: Joi.string().trim().min(1).max(255).required().messages({
+    "string.empty": "Lý do từ chối là bắt buộc",
+    "string.max": "Lý do tối đa 255 ký tự",
+    "any.required": "Lý do từ chối là bắt buộc",
+  }),
+});
