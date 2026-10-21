@@ -9,6 +9,7 @@ import { fineLevelsRouter } from "./routes/fineLevels.js";
 import { finesRouter } from "./routes/fines.js";
 import { meRouter } from "./routes/me.js";
 import { returnRequestsRouter } from "./routes/returnRequests.js";
+import { usersRouter } from "./routes/users.js";
 
 export const app = express();
 
@@ -31,6 +32,7 @@ app.use("/api/borrows", borrowsRouter);
 app.use("/api/return-requests", returnRequestsRouter);
 app.use("/api/fine-levels", fineLevelsRouter);
 app.use("/api/fines", finesRouter);
+app.use("/api/users", usersRouter);
 
 app.use((err, req, res, _next) => {
   // Lỗi 4xx của body-parser (JSON sai định dạng, body quá lớn) là lỗi của client
