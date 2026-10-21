@@ -2,9 +2,32 @@ import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { validate } from "../middleware/validate.js";
-import { registerSchema } from "../validators/auth.js";
+import { signToken } from "../lib/token.js";
+import { loginSchema, registerSchema } from "../validators/auth.js";
 
 export const authRouter = Router();
+
+const BAD_CREDENTIALS = { message: "Email hoặc mật khẩu không đúng" };
+const INACTIVE = {
+  PENDING: "Tài khoản đang chờ quản lý viên kích hoạt",
+  DISABLED: "Tài khoản đã bị vô hiệu hóa",
+};
+// Hash giả để so sánh khi email không tồn tại, tránh lộ email qua thời gian phản hồi
+const DUMMY_HASH = bcrypt.hashSync("dummy-password", 10);
+
+// 2.1.2 Đăng nhập: trả JWT 24h
+authRouter.post("/login", validate(loginSchema), async (req, res) => {
+  const { email, password } = req.body;
+  const user = await prisma.user.findUnique({ where: { email } });
+  const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
+  if (!user || !ok) return res.status(401).json(BAD_CREDENTIALS);
+  if (user.status !== "ACTIVE") return res.status(403).json({ message: INACTIVE[user.status] });
+
+  res.json({
+    token: signToken(user),
+    user: { id: user.id, email: user.email, name: user.name, role: user.role },
+  });
+});
 
 const EMAIL_TAKEN = { message: "Email đã được sử dụng", errors: { email: "Email đã được sử dụng" } };
 

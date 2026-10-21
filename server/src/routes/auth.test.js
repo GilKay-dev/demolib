@@ -8,6 +8,73 @@ vi.mock("../lib/prisma.js", () => ({
 const { prisma } = await import("../lib/prisma.js");
 const { app } = await import("../app.js");
 
+process.env.JWT_SECRET = "test-secret";
+const { default: bcrypt } = await import("bcryptjs");
+const { default: jwt } = await import("jsonwebtoken");
+
+describe("POST /api/auth/login", () => {
+  const creds = { email: " Reader@Example.COM ", password: "password1" };
+  const dbUser = (patch = {}) => ({
+    id: 7,
+    email: "reader@example.com",
+    name: "An",
+    role: "LIBRARIAN",
+    status: "ACTIVE",
+    passwordHash: bcrypt.hashSync("password1", 4),
+    ...patch,
+  });
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it("returns a 24h JWT and the user without the password hash", async () => {
+    prisma.user.findUnique.mockResolvedValue(dbUser());
+    const res = await request(app).post("/api/auth/login").send(creds);
+    expect(res.status).toBe(200);
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: "reader@example.com" } });
+    expect(res.body.user).toEqual({ id: 7, email: "reader@example.com", name: "An", role: "LIBRARIAN" });
+    const payload = jwt.verify(res.body.token, "test-secret");
+    expect(payload).toMatchObject({ sub: 7, role: "LIBRARIAN" });
+    expect(payload.exp - payload.iat).toBe(24 * 3600);
+  });
+
+  it.each([
+    ["email", { email: "abc" }],
+    ["email", { email: "" }],
+    ["password", { password: "" }],
+    ["password", { password: "short" }],
+    ["password", { password: "a".repeat(17) }],
+  ])("rejects invalid %s", async (field, patch) => {
+    const res = await request(app).post("/api/auth/login").send({ ...creds, ...patch });
+    expect(res.status).toBe(400);
+    expect(res.body.errors[field]).toBeTruthy();
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("returns the same 401 for an unknown email and a wrong password", async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    const unknown = await request(app).post("/api/auth/login").send(creds);
+    prisma.user.findUnique.mockResolvedValue(dbUser());
+    const wrong = await request(app).post("/api/auth/login").send({ ...creds, password: "wrongpass1" });
+    expect(unknown.status).toBe(401);
+    expect(wrong.status).toBe(401);
+    expect(wrong.body).toEqual(unknown.body);
+    expect(wrong.body.token).toBeUndefined();
+  });
+
+  it.each(["PENDING", "DISABLED"])("returns 403 without a token for a %s account", async (status) => {
+    prisma.user.findUnique.mockResolvedValue(dbUser({ status }));
+    const res = await request(app).post("/api/auth/login").send(creds);
+    expect(res.status).toBe(403);
+    expect(res.body.token).toBeUndefined();
+  });
+
+  it("does not reveal inactive status when the password is wrong", async () => {
+    prisma.user.findUnique.mockResolvedValue(dbUser({ status: "PENDING" }));
+    const res = await request(app).post("/api/auth/login").send({ ...creds, password: "wrongpass1" });
+    expect(res.status).toBe(401);
+  });
+});
+
 const valid = {
   email: "  Reader@Example.COM ",
   name: "Nguyễn Văn A",
