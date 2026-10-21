@@ -114,9 +114,36 @@ describe("POST /api/auth/register", () => {
     expect(prisma.user.create).not.toHaveBeenCalled();
   });
 
-  it("rejects a client-supplied role", async () => {
-    await request(app).post("/api/auth/register").send({ ...valid, role: "ADMIN" });
+  it("rejects a client-supplied role with a Vietnamese message", async () => {
+    const res = await request(app).post("/api/auth/register").send({ ...valid, role: "ADMIN" });
+    expect(res.status).toBe(400);
+    expect(res.body.errors.role).toBe("Trường không hợp lệ");
     expect(prisma.user.create).not.toHaveBeenCalled();
+  });
+
+  it("returns a Vietnamese message for a non-string field", async () => {
+    const res = await request(app).post("/api/auth/register").send({ ...valid, email: 123 });
+    expect(res.status).toBe(400);
+    expect(res.body.errors.email).not.toMatch(/[a-z]+\.[a-z]+|"email"/);
+  });
+
+  it("returns 400, not 500, for malformed JSON", async () => {
+    const res = await request(app)
+      .post("/api/auth/register")
+      .set("Content-Type", "application/json")
+      .send("{bad");
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 413 for an oversized body", async () => {
+    const res = await request(app).post("/api/auth/register").send({ ...valid, name: "a".repeat(200_000) });
+    expect(res.status).toBe(413);
+  });
+
+  it("rethrows a unique violation on a column other than email", async () => {
+    prisma.user.create.mockRejectedValue(Object.assign(new Error("dup"), { code: "P2002", meta: { target: ["phone"] } }));
+    const res = await request(app).post("/api/auth/register").send(valid);
+    expect(res.status).toBe(500);
   });
 
   it("returns 409 when the email already exists", async () => {

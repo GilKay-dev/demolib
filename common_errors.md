@@ -23,3 +23,6 @@ Log of past mistakes and fixes, grouped by category. Check before repeating simi
 
 - **Misleading test name.** A test titled "ignores a client-supplied role" actually asserts Joi rejects the unknown `role` key (400, no create).
   **Fix:** renamed to "rejects a client-supplied role"; name tests after the real behaviour.
+
+- **JSX edit via `node -e '...'` silently dropped quotes.** Single quotes inside a single-quoted shell string turned `field === 'email'` into `field === email` and left regex replacements unapplied; nothing errored.
+  **Fix:** use the Edit tool for source changes (same rule as above); if a script is unavoidable, write it to a file first.

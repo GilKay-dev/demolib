@@ -50,7 +50,11 @@ authRouter.post("/register", validate(registerSchema), async (req, res) => {
     });
   } catch (err) {
     // Hai request cùng email đồng thời: unique constraint bắt request thứ hai
-    if (err.code === "P2002") return res.status(409).json(EMAIL_TAKEN);
+    // Chỉ coi là trùng email khi đúng cột email (hoặc driver không báo cột vi phạm)
+    const target = err.meta?.target;
+    if (err.code === "P2002" && (!target || String(target).includes("email"))) {
+      return res.status(409).json(EMAIL_TAKEN);
+    }
     throw err;
   }
 });

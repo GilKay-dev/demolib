@@ -4,15 +4,17 @@ import { api } from '../lib/api'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-function Field({ label, error, children }) {
+function Field({ id, label, error, children }) {
   return (
-    <label className="block">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
+    <div>
+      <label htmlFor={id} className="text-sm font-medium text-slate-700">{label}</label>
       {children}
-      {error && <span role="alert" className="mt-1 block text-sm text-red-600">{error}</span>}
-    </label>
+      {error && <span id={`${id}-error`} role="alert" className="mt-1 block text-sm text-red-600">{error}</span>}
+    </div>
   )
 }
+
+const FIELDS = ['email', 'name', 'password', 'confirmPassword']
 
 const inputClass = 'mt-1 w-full rounded border border-slate-300 px-3 py-2'
 
@@ -27,6 +29,12 @@ export default function Register() {
     formState: { errors, isSubmitting },
   } = useForm()
 
+  const a11y = (name) => ({
+    id: name,
+    'aria-invalid': !!errors[name],
+    'aria-describedby': errors[name] ? `${name}-error` : undefined,
+  })
+
   const onSubmit = async (values) => {
     setFormError('')
     try {
@@ -35,7 +43,10 @@ export default function Register() {
     } catch (err) {
       const fieldErrors = err.response?.data?.errors
       if (fieldErrors) {
-        for (const [field, message] of Object.entries(fieldErrors)) setError(field, { message })
+        for (const [field, message] of Object.entries(fieldErrors)) {
+          if (FIELDS.includes(field)) setError(field, { message })
+          else setFormError(message)
+        }
       } else {
         setFormError('Không thể đăng ký, vui lòng thử lại')
       }
@@ -54,9 +65,10 @@ export default function Register() {
     <main className="mx-auto max-w-md p-8">
       <h1 className="mb-6 text-2xl font-bold text-slate-900">Đăng ký</h1>
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="space-y-4">
-        <Field label="Email" error={errors.email?.message}>
+        <Field id="email" label="Email" error={errors.email?.message}>
           <input
             type="email"
+            {...a11y('email')}
             className={inputClass}
             {...register('email', {
               required: 'Email không được để trống',
@@ -64,8 +76,9 @@ export default function Register() {
             })}
           />
         </Field>
-        <Field label="Tên" error={errors.name?.message}>
+        <Field id="name" label="Tên" error={errors.name?.message}>
           <input
+            {...a11y('name')}
             className={inputClass}
             {...register('name', {
               validate: (v) => v.trim() !== '' || 'Tên không được để trống',
@@ -73,20 +86,23 @@ export default function Register() {
             })}
           />
         </Field>
-        <Field label="Mật khẩu" error={errors.password?.message}>
+        <Field id="password" label="Mật khẩu" error={errors.password?.message}>
           <input
             type="password"
+            {...a11y('password')}
             className={inputClass}
             {...register('password', {
               required: 'Mật khẩu không được để trống',
+              deps: ['confirmPassword'],
               minLength: { value: 8, message: 'Mật khẩu phải từ 8 đến 16 ký tự' },
               maxLength: { value: 16, message: 'Mật khẩu phải từ 8 đến 16 ký tự' },
             })}
           />
         </Field>
-        <Field label="Xác nhận mật khẩu" error={errors.confirmPassword?.message}>
+        <Field id="confirmPassword" label="Xác nhận mật khẩu" error={errors.confirmPassword?.message}>
           <input
             type="password"
+            {...a11y('confirmPassword')}
             className={inputClass}
             {...register('confirmPassword', {
               required: 'Mật khẩu xác nhận không được để trống',

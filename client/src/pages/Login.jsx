@@ -27,7 +27,10 @@ export default function Login() {
     } catch (err) {
       const res = err.response
       if (res?.data?.errors) {
-        for (const [field, message] of Object.entries(res.data.errors)) setError(field, { message })
+        for (const [field, message] of Object.entries(res.data.errors)) {
+          if (field === 'email' || field === 'password') setError(field, { message })
+          else setFormError(message)
+        }
       } else {
         setFormError(res?.data?.message ?? 'Không thể đăng nhập, vui lòng thử lại')
       }
