@@ -8,6 +8,7 @@ vi.mock("../lib/prisma.js", () => {
     book: { findFirst: vi.fn(), update: vi.fn() },
     borrow: { findFirst: vi.fn(), count: vi.fn(), create: vi.fn(), findMany: vi.fn(), update: vi.fn() },
     fine: { findFirst: vi.fn() },
+    returnRequest: { findFirst: vi.fn(), create: vi.fn() },
   });
   const tx = db();
   return { prisma: { ...db(), user: { findUnique: vi.fn() }, $transaction: vi.fn((fn) => fn(tx)), tx } };
@@ -225,5 +226,77 @@ describe("staff handling of borrow requests (2.3.2)", () => {
   it("returns 409 when rejecting an already handled request", async () => {
     prisma.tx.$queryRaw.mockReset().mockResolvedValueOnce([{ ...pendingRow, status: "REJECTED" }]);
     expect((await request(app).post("/api/borrows/5/reject").set(staff()).send({ reason: "x" })).status).toBe(409);
+  });
+});
+
+describe("reader return requests (2.4.1)", () => {
+  const reader = () => auth();
+  const ownRow = { id: 5, reader_id: 7, status: "BORROWING" };
+
+  beforeEach(() => {
+    prisma.tx.$queryRaw.mockReset().mockResolvedValue([ownRow]);
+    prisma.tx.returnRequest.findFirst.mockResolvedValue(null);
+    prisma.tx.returnRequest.create.mockImplementation(async ({ data }) => ({ id: 31, status: "PENDING", ...data }));
+  });
+
+  it("returns 401 without a token and 403 for staff", async () => {
+    expect((await request(app).post("/api/borrows/5/return-requests")).status).toBe(401);
+    prisma.user.findUnique.mockResolvedValue(fakeUser({ id: 2, role: "LIBRARIAN" }));
+    expect((await request(app).post("/api/borrows/5/return-requests").set(authFor(fakeUser({ id: 2, role: "LIBRARIAN" })))).status).toBe(403);
+    expect(prisma.tx.returnRequest.create).not.toHaveBeenCalled();
+  });
+
+  it("creates a pending return request without touching the borrow or inventory", async () => {
+    const res = await request(app).post("/api/borrows/5/return-requests").set(reader());
+    expect(res.status).toBe(201);
+    expect(res.body.returnRequest).toMatchObject({ id: 31, borrowId: 5, status: "PENDING" });
+    expect(prisma.tx.borrow.update).not.toHaveBeenCalled();
+    expect(prisma.tx.book.update).not.toHaveBeenCalled();
+  });
+
+  it("allows an overdue borrow", async () => {
+    prisma.tx.$queryRaw.mockResolvedValue([{ ...ownRow, status: "OVERDUE" }]);
+    expect((await request(app).post("/api/borrows/5/return-requests").set(reader())).status).toBe(201);
+  });
+
+  it("returns 404 for an unknown or malformed id", async () => {
+    prisma.tx.$queryRaw.mockResolvedValue([]);
+    expect((await request(app).post("/api/borrows/5/return-requests").set(reader())).status).toBe(404);
+    expect((await request(app).post("/api/borrows/abc/return-requests").set(reader())).status).toBe(404);
+  });
+
+  it("returns 403 for someone else's borrow", async () => {
+    prisma.tx.$queryRaw.mockResolvedValue([{ ...ownRow, reader_id: 99 }]);
+    expect((await request(app).post("/api/borrows/5/return-requests").set(reader())).status).toBe(403);
+    expect(prisma.tx.returnRequest.create).not.toHaveBeenCalled();
+  });
+
+  it.each(["PENDING", "RETURNED", "REJECTED"])("returns 409 for a %s borrow", async (status) => {
+    prisma.tx.$queryRaw.mockResolvedValue([{ ...ownRow, status }]);
+    expect((await request(app).post("/api/borrows/5/return-requests").set(reader())).status).toBe(409);
+    expect(prisma.tx.returnRequest.create).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 when a pending return request already exists", async () => {
+    prisma.tx.returnRequest.findFirst.mockResolvedValue({ id: 30 });
+    expect((await request(app).post("/api/borrows/5/return-requests").set(reader())).status).toBe(409);
+    expect(prisma.tx.returnRequest.create).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 when a concurrent duplicate hits the unique index", async () => {
+    prisma.tx.returnRequest.create.mockRejectedValue({ code: "P2002" });
+    expect((await request(app).post("/api/borrows/5/return-requests").set(reader())).status).toBe(409);
+  });
+
+  it("lists the reader's active borrows with the pending-return flag", async () => {
+    prisma.borrow.findMany.mockResolvedValue([
+      { id: 5, status: "BORROWING", book: { id: 4, title: "A", author: "B" }, returnRequests: [{ id: 31 }] },
+      { id: 6, status: "OVERDUE", book: { id: 5, title: "C", author: "D" }, returnRequests: [] },
+    ]);
+    const res = await request(app).get("/api/borrows/mine").set(reader());
+    expect(res.status).toBe(200);
+    expect(res.body.items.map((b) => b.returnPending)).toEqual([true, false]);
+    expect(prisma.borrow.findMany.mock.calls[0][0].where).toMatchObject({ readerId: 7 });
+    expect((await request(app).get("/api/borrows/mine")).status).toBe(401);
   });
 });

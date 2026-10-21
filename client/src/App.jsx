@@ -8,6 +8,7 @@ import BookList from './pages/BookList'
 import BorrowRequests from './pages/BorrowRequests'
 import Categories from './pages/Categories'
 import Login from './pages/Login'
+import MyBorrows from './pages/MyBorrows'
 import Profile from './pages/Profile'
 import Register from './pages/Register'
 
@@ -22,7 +23,12 @@ function Home() {
       {user ? (
         <>
           <p className="mt-2 text-slate-700">Xin chào, {user.name}</p>
-          {user.role === 'READER' && <Link to="/profile" className={linkClass}>Hồ sơ cá nhân</Link>}
+          {user.role === 'READER' && (
+            <>
+              <Link to="/profile" className={linkClass}>Hồ sơ cá nhân</Link>
+              <Link to="/my-borrows" className={linkClass}>Sách đang mượn</Link>
+            </>
+          )}
           {user.role === 'LIBRARIAN' && (
             <>
               <Link to="/categories" className={linkClass}>Thể loại sách</Link>
@@ -79,6 +85,14 @@ function App() {
         element={
           <RequireAuth roles={['LIBRARIAN']}>
             <BorrowRequests />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/my-borrows"
+        element={
+          <RequireAuth roles={['READER']}>
+            <MyBorrows />
           </RequireAuth>
         }
       />
