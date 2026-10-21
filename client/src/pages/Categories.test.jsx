@@ -103,6 +103,29 @@ describe('Categories', () => {
       expect(api.put).not.toHaveBeenCalled()
     })
 
+    it('sends the trimmed name and shows it back in the input', async () => {
+      api.put.mockResolvedValue({ data: { id: 2, name: 'Văn học', bookCount: 0 } })
+      const user = userEvent.setup()
+      await renderPage()
+      await user.clear(nameInput('Thiếu nhi'))
+      await user.type(nameInput('Thiếu nhi'), '  Văn học  {Enter}')
+      expect(await screen.findByLabelText('Tên thể loại Văn học')).toHaveValue('Văn học')
+      expect(api.put).toHaveBeenCalledWith('/categories/2', { name: 'Văn học' })
+    })
+
+    it('ignores a second commit while a save is in flight', async () => {
+      let resolve
+      api.put.mockReturnValue(new Promise((r) => { resolve = r }))
+      const user = userEvent.setup()
+      await renderPage()
+      await user.type(nameInput('Thiếu nhi'), 'x{Enter}')
+      await user.click(nameInput('Thiếu nhi'))
+      await user.type(nameInput('Thiếu nhi'), 'y')
+      await user.tab()
+      expect(api.put).toHaveBeenCalledTimes(1)
+      resolve({ data: { id: 2, name: 'Thiếu nhix', bookCount: 0 } })
+    })
+
     it('shows validation and server errors at the cell and keeps the typed value', async () => {
       api.put.mockRejectedValue(failure(409, { errors: { name: 'Thể loại đã tồn tại' } }))
       const user = userEvent.setup()

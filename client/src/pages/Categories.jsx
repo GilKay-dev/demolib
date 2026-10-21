@@ -17,26 +17,33 @@ function CategoryRow({ category, onRenamed, onDelete, onStale }) {
   const [value, setValue] = useState(category.name)
   const [error, setError] = useState('')
   const cancelled = useRef(false)
+  const saving = useRef(false)
 
   const commit = async () => {
     if (cancelled.current) {
       cancelled.current = false
       return
     }
-    if (value.trim() === category.name) {
+    if (saving.current) return // đang lưu: bỏ qua blur chồng để các PUT không về sai thứ tự
+    const name = value.trim()
+    if (name === category.name) {
       setValue(category.name)
       setError('')
       return
     }
-    const invalid = validateName(value)
+    const invalid = validateName(name)
     if (invalid) return setError(invalid)
+    saving.current = true
     try {
-      const { data } = await api.put(`/categories/${category.id}`, { name: value })
+      const { data } = await api.put(`/categories/${category.id}`, { name })
       setError('')
+      setValue(data.name)
       onRenamed(data)
     } catch (err) {
       if (err.response?.status === 404) return onStale()
       setError(serverMessage(err, 'Không thể lưu, vui lòng thử lại'))
+    } finally {
+      saving.current = false
     }
   }
 
@@ -171,6 +178,8 @@ export default function Categories() {
   }
 
   const confirmDelete = async () => {
+    if (deleting) return
+    setNotice('')
     setDeleting(true)
     setDeleteError('')
     try {
@@ -187,6 +196,7 @@ export default function Categories() {
       } else {
         // 409: còn sách thuộc thể loại (BE kiểm tra lại dù FE đã vô hiệu hóa nút)
         setDeleteError(err.response?.data?.message ?? 'Không thể xóa, vui lòng thử lại')
+        // Số sách đã thay đổi: tải lại bảng phía sau, giữ hộp thoại để người dùng đọc lý do
         if (status === 409) load()
       }
     } finally {

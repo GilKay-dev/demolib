@@ -34,10 +34,10 @@ const parseId = (req, res, next) => {
 categoriesRouter.get("/", async (req, res) => {
   const categories = await prisma.category.findMany({
     where: { deletedAt: null },
-    orderBy: { name: "asc" },
     include: { _count: activeBooks },
   });
-  res.json(categories.map(toCategory));
+  // Sắp xếp theo locale tiếng Việt (giống client), không phụ thuộc collation của DB
+  res.json(categories.map(toCategory).sort((a, b) => a.name.localeCompare(b.name, "vi")));
 });
 
 categoriesRouter.post("/", validate(categorySchema), async (req, res) => {
@@ -73,15 +73,18 @@ categoriesRouter.put("/:id", parseId, validate(categorySchema), async (req, res)
 
 // Xóa mềm; không xóa được khi còn sách (chưa xóa) thuộc thể loại
 categoriesRouter.delete("/:id", parseId, async (req, res) => {
+  // Kiểm tra "không còn sách" và xóa trong một câu lệnh có điều kiện để không hở giữa hai bước
+  const { count } = await prisma.category.updateMany({
+    where: { id: req.categoryId, deletedAt: null, books: { none: { deletedAt: null } } },
+    data: { deletedAt: new Date() },
+  });
+  if (count === 1) return res.json({ message: "Xóa thể loại thành công" });
+
+  // Không xóa được: phân biệt không tồn tại (404) với còn sách (409)
   const category = await prisma.category.findFirst({
     where: { id: req.categoryId, deletedAt: null },
     include: { _count: activeBooks },
   });
   if (!category) return res.status(404).json(NOT_FOUND);
-  const bookCount = category._count.books;
-  if (bookCount > 0) {
-    return res.status(409).json({ message: `Không thể xóa: còn ${bookCount} sách thuộc thể loại này` });
-  }
-  await prisma.category.update({ where: { id: req.categoryId }, data: { deletedAt: new Date() } });
-  res.json({ message: "Xóa thể loại thành công" });
+  res.status(409).json({ message: `Không thể xóa: còn ${category._count.books} sách thuộc thể loại này` });
 });

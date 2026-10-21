@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../lib/prisma.js", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
-    category: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
+    category: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   },
 }));
 
@@ -39,7 +39,7 @@ describe("access control", () => {
 
 describe("GET /api/categories", () => {
   it("lists active categories with their active book counts", async () => {
-    prisma.category.findMany.mockResolvedValue([withCount({ id: 1, name: "A", createdAt: 0 }, 2), withCount({ id: 2, name: "B" })]);
+    prisma.category.findMany.mockResolvedValue([withCount({ id: 2, name: "B" }), withCount({ id: 1, name: "A", createdAt: 0 }, 2)]);
     const res = await request(app).get("/api/categories").set(auth());
     expect(res.status).toBe(200);
     expect(res.body).toEqual([
@@ -127,26 +127,32 @@ describe("PUT /api/categories/:id", () => {
 });
 
 describe("DELETE /api/categories/:id", () => {
-  it("soft-deletes a category with no active books", async () => {
-    prisma.category.findFirst.mockResolvedValue(withCount({ id: 4, name: "X" }, 0));
+  it("soft-deletes with a single conditional update that requires no active books", async () => {
+    prisma.category.updateMany.mockResolvedValue({ count: 1 });
     const res = await request(app).delete("/api/categories/4").set(auth());
     expect(res.status).toBe(200);
-    const { where, data } = prisma.category.update.mock.calls[0][0];
-    expect(where).toEqual({ id: 4 });
+    const { where, data } = prisma.category.updateMany.mock.calls[0][0];
+    expect(where).toEqual({ id: 4, deletedAt: null, books: { none: { deletedAt: null } } });
     expect(data.deletedAt).toBeInstanceOf(Date);
+    expect(prisma.category.findFirst).not.toHaveBeenCalled();
   });
 
   it("returns 409 with the book count when books still reference it", async () => {
+    prisma.category.updateMany.mockResolvedValue({ count: 0 });
     prisma.category.findFirst.mockResolvedValue(withCount({ id: 4, name: "X" }, 3));
     const res = await request(app).delete("/api/categories/4").set(auth());
     expect(res.status).toBe(409);
     expect(res.body.message).toContain("3");
-    expect(prisma.category.update).not.toHaveBeenCalled();
   });
 
   it("returns 404 when the category does not exist or is already deleted", async () => {
+    prisma.category.updateMany.mockResolvedValue({ count: 0 });
     const res = await request(app).delete("/api/categories/4").set(auth());
     expect(res.status).toBe(404);
-    expect(prisma.category.update).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for a malformed id without touching the database", async () => {
+    expect((await request(app).delete("/api/categories/abc").set(auth())).status).toBe(404);
+    expect(prisma.category.updateMany).not.toHaveBeenCalled();
   });
 });
