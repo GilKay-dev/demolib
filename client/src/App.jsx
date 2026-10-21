@@ -7,6 +7,7 @@ import BookEdit from './pages/BookEdit'
 import BookList from './pages/BookList'
 import BorrowRequests from './pages/BorrowRequests'
 import Categories from './pages/Categories'
+import FineLevels from './pages/FineLevels'
 import Login from './pages/Login'
 import MyBorrows from './pages/MyBorrows'
 import Profile from './pages/Profile'
@@ -38,6 +39,7 @@ function Home() {
               <Link to="/return-requests" className={linkClass}>Yêu cầu trả chờ xác nhận</Link>
             </>
           )}
+          {user.role === 'ADMIN' && <Link to="/fine-levels" className={linkClass}>Mức phạt</Link>}
           <button type="button" onClick={logout} className={`${linkClass} cursor-pointer`}>Đăng xuất</button>
         </>
       ) : (
@@ -95,6 +97,14 @@ function App() {
         element={
           <RequireAuth roles={['LIBRARIAN']}>
             <ReturnRequests />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/fine-levels"
+        element={
+          <RequireAuth roles={['ADMIN']}>
+            <FineLevels />
           </RequireAuth>
         }
       />
