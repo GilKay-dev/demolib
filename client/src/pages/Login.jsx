@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { Link, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 
@@ -11,6 +11,7 @@ export default function Login() {
   const [formError, setFormError] = useState('')
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const {
     register,
     handleSubmit,
@@ -23,7 +24,7 @@ export default function Login() {
     try {
       const { data } = await api.post('/auth/login', values)
       login(data)
-      navigate('/')
+      navigate(location.state?.from ?? '/')
     } catch (err) {
       const res = err.response
       if (res?.data?.errors) {

@@ -50,13 +50,27 @@ export function AuthProvider({ children }) {
     setAuth(null)
   }, [])
 
+  // Sau khi sửa hồ sơ: cập nhật user trong Context và localStorage
+  const updateUser = useCallback((patch) => {
+    setAuth((prev) => {
+      if (!prev) return prev
+      const next = { ...prev, user: { ...prev.user, ...patch } }
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+      } catch {
+        // ignore
+      }
+      return next
+    })
+  }, [])
+
   useEffect(() => {
     setUnauthorizedHandler(logout)
     return () => setUnauthorizedHandler(() => {})
   }, [logout])
 
   const user = auth?.user ?? null
-  const value = useMemo(() => ({ user, login, logout }), [user, login, logout])
+  const value = useMemo(() => ({ user, login, logout, updateUser }), [user, login, logout, updateUser])
 
   return <AuthContext value={value}>{children}</AuthContext>
 }

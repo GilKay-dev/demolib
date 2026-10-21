@@ -1,22 +1,12 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { Field } from '../components/Field'
 import { api } from '../lib/api'
+import { fieldProps, inputClass } from '../lib/form'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-function Field({ id, label, error, children }) {
-  return (
-    <div>
-      <label htmlFor={id} className="text-sm font-medium text-slate-700">{label}</label>
-      {children}
-      {error && <span id={`${id}-error`} role="alert" className="mt-1 block text-sm text-red-600">{error}</span>}
-    </div>
-  )
-}
-
 const FIELDS = ['email', 'name', 'password', 'confirmPassword']
-
-const inputClass = 'mt-1 w-full rounded border border-slate-300 px-3 py-2'
 
 export default function Register() {
   const [done, setDone] = useState('')
@@ -29,11 +19,7 @@ export default function Register() {
     formState: { errors, isSubmitting },
   } = useForm()
 
-  const a11y = (name) => ({
-    id: name,
-    'aria-invalid': !!errors[name],
-    'aria-describedby': errors[name] ? `${name}-error` : undefined,
-  })
+  const a11y = (name) => fieldProps(errors, name)
 
   const onSubmit = async (values) => {
     setFormError('')
