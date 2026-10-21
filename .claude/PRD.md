@@ -338,7 +338,7 @@ Bảng dưới đây mô tả các phụ thuộc giữa các tính năng. Tính 
 | 14 | Quản lý mức phạt | 2.5.1 | 2.1.2 | Cần đăng nhập với vai trò quản lý viên | ✅ Hoàn thành |
 | 15 | Xem & Thanh Toán Phạt (Độc Giả) | 2.5.2 | 2.1.2, 2.4.2, 2.5.1 | Cần đăng nhập, có phiếu phạt và mức phạt | ✅ Hoàn thành |
 | 16 | Xem & Thanh Toán Phạt (Nhân Viên) | 2.5.3 | 2.1.2, 2.5.2 | Cần đăng nhập và có phiếu phạt chờ xác nhận | ✅ Hoàn thành |
-| 17 | Danh Sách Người Dùng | 2.6.1 | 2.1.2 | Cần đăng nhập với vai trò quản lý viên | ⬜ Chưa làm |
+| 17 | Danh Sách Người Dùng | 2.6.1 | 2.1.2 | Cần đăng nhập với vai trò quản lý viên | ✅ Hoàn thành |
 | 18 | Gán Vai Trò | 2.6.2 | 2.1.2, 2.6.1 | Cần đăng nhập và có danh sách người dùng | ⬜ Chưa làm |
 | 19 | Báo Cáo Tổng Quan (Dashboard) | 2.7.1 | 2.1.2, 2.2.2, 2.3.1, 2.4.2 | Cần có dữ liệu sách, mượn, trả | ⬜ Chưa làm |
 | 20 | Báo Cáo Chi Tiết | 2.7.2 | 2.1.2, 2.7.1 | Cần có dashboard và dữ liệu đầy đủ | ⬜ Chưa làm |

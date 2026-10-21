@@ -15,6 +15,7 @@ import MyFines from './pages/MyFines'
 import Profile from './pages/Profile'
 import Register from './pages/Register'
 import ReturnRequests from './pages/ReturnRequests'
+import Users from './pages/Users'
 
 const linkClass = 'mt-4 mr-4 inline-block text-blue-700 underline'
 
@@ -43,7 +44,12 @@ function Home() {
               <Link to="/fine-confirmations" className={linkClass}>Phiếu phạt chờ xác nhận</Link>
             </>
           )}
-          {user.role === 'ADMIN' && <Link to="/fine-levels" className={linkClass}>Mức phạt</Link>}
+          {user.role === 'ADMIN' && (
+            <>
+              <Link to="/fine-levels" className={linkClass}>Mức phạt</Link>
+              <Link to="/users" className={linkClass}>Quản lý người dùng</Link>
+            </>
+          )}
           <button type="button" onClick={logout} className={`${linkClass} cursor-pointer`}>Đăng xuất</button>
         </>
       ) : (
@@ -117,6 +123,14 @@ function App() {
         element={
           <RequireAuth roles={['ADMIN']}>
             <FineLevels />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/users"
+        element={
+          <RequireAuth roles={['ADMIN']}>
+            <Users />
           </RequireAuth>
         }
       />
