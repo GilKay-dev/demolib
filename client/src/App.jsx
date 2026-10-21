@@ -11,6 +11,7 @@ import Login from './pages/Login'
 import MyBorrows from './pages/MyBorrows'
 import Profile from './pages/Profile'
 import Register from './pages/Register'
+import ReturnRequests from './pages/ReturnRequests'
 
 const linkClass = 'mt-4 mr-4 inline-block text-blue-700 underline'
 
@@ -34,6 +35,7 @@ function Home() {
               <Link to="/categories" className={linkClass}>Thể loại sách</Link>
               <Link to="/books/new" className={linkClass}>Thêm sách mới</Link>
               <Link to="/borrow-requests" className={linkClass}>Đơn mượn chờ xác nhận</Link>
+              <Link to="/return-requests" className={linkClass}>Yêu cầu trả chờ xác nhận</Link>
             </>
           )}
           <button type="button" onClick={logout} className={`${linkClass} cursor-pointer`}>Đăng xuất</button>
@@ -85,6 +87,14 @@ function App() {
         element={
           <RequireAuth roles={['LIBRARIAN']}>
             <BorrowRequests />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/return-requests"
+        element={
+          <RequireAuth roles={['LIBRARIAN']}>
+            <ReturnRequests />
           </RequireAuth>
         }
       />
