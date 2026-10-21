@@ -300,3 +300,48 @@ describe("reader return requests (2.4.1)", () => {
     expect((await request(app).get("/api/borrows/mine")).status).toBe(401);
   });
 });
+
+describe("reader borrow history (2.3.3)", () => {
+  const dayMs = 86400000;
+  const due = new Date(Date.now() + 3 * dayMs);
+  const row = (over) => ({ id: 5, reader_id: 7, status: "BORROWING", due_date: due, renew_count: 0, ...over });
+
+  beforeEach(() => {
+    prisma.tx.$queryRaw.mockReset().mockResolvedValue([row()]);
+    prisma.tx.borrow.update.mockImplementation(async ({ data }) => ({ id: 5, ...data, renewCount: 1 }));
+  });
+
+  it("filters history by status and rejects an unknown status", async () => {
+    prisma.borrow.findMany.mockResolvedValue([{ id: 8, status: "REJECTED", rejectReason: "Hết sách", book: {}, returnRequests: [] }]);
+    const res = await request(app).get("/api/borrows/mine?status=REJECTED").set(auth());
+    expect(res.status).toBe(200);
+    expect(res.body.items[0].rejectReason).toBe("Hết sách");
+    expect(prisma.borrow.findMany.mock.calls[0][0].where).toEqual({ readerId: 7, status: "REJECTED" });
+    expect((await request(app).get("/api/borrows/mine?status=bogus").set(auth())).status).toBe(400);
+  });
+
+  it("renews by 7 days and bumps the renew count", async () => {
+    const res = await request(app).post("/api/borrows/5/renew").set(auth());
+    expect(res.status).toBe(200);
+    const { data } = prisma.tx.borrow.update.mock.calls[0][0];
+    expect(data.renewCount).toEqual({ increment: 1 });
+    expect(data.dueDate.getTime()).toBe(due.getTime() + 7 * dayMs);
+  });
+
+  it("returns 409 when already renewed, overdue, or not borrowing", async () => {
+    for (const over of [{ renew_count: 1 }, { due_date: new Date(Date.now() - 2 * dayMs) }, { status: "OVERDUE" }, { status: "PENDING" }]) {
+      prisma.tx.$queryRaw.mockResolvedValue([row(over)]);
+      expect((await request(app).post("/api/borrows/5/renew").set(auth())).status).toBe(409);
+    }
+    expect(prisma.tx.borrow.update).not.toHaveBeenCalled();
+  });
+
+  it("returns 401/403/404 for anonymous, other reader's, and unknown borrows", async () => {
+    expect((await request(app).post("/api/borrows/5/renew")).status).toBe(401);
+    prisma.tx.$queryRaw.mockResolvedValue([row({ reader_id: 99 })]);
+    expect((await request(app).post("/api/borrows/5/renew").set(auth())).status).toBe(403);
+    prisma.tx.$queryRaw.mockResolvedValue([]);
+    expect((await request(app).post("/api/borrows/5/renew").set(auth())).status).toBe(404);
+    expect((await request(app).post("/api/borrows/abc/renew").set(auth())).status).toBe(404);
+  });
+});

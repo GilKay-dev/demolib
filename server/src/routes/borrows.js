@@ -157,22 +157,56 @@ const NOT_OWNER = { message: "Không có quyền thao tác trên đơn mượn n
 const NOT_BORROWING = { message: "Chỉ yêu cầu trả được sách đang mượn" };
 const RETURN_DUPLICATE = { message: "Bạn đã gửi yêu cầu trả cho sách này" };
 
-// 2.4.1 Sách đang mượn / quá hạn của độc giả, kèm cờ đã gửi yêu cầu trả (2.3.3 sẽ mở rộng thành lịch sử đầy đủ)
+const ALL_STATUSES = ["PENDING", "BORROWING", "OVERDUE", "RETURNED", "REJECTED"];
+const RENEW_DAYS = 7;
+const MAX_RENEWALS = 1;
+
+// 2.3.3 Lịch sử mượn của độc giả (mới nhất trước), lọc theo ?status=; kèm lý do từ chối, ngày trả, cờ đã gửi yêu cầu trả
 borrowsRouter.get("/mine", authenticate, requireRole("READER"), async (req, res) => {
+  const { status } = req.query;
+  if (status !== undefined && !ALL_STATUSES.includes(status)) return res.status(400).json({ message: "Trạng thái không hợp lệ" });
   const rows = await prisma.borrow.findMany({
-    where: { readerId: req.user.id, status: { in: ["BORROWING", "OVERDUE"] } },
-    orderBy: [{ dueDate: "asc" }, { id: "asc" }],
+    where: { readerId: req.user.id, ...(status && { status }) },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: {
       id: true,
       status: true,
       borrowDate: true,
       dueDate: true,
+      returnDate: true,
+      renewCount: true,
+      rejectReason: true,
       book: { select: { id: true, title: true, author: true } },
       returnRequests: { where: { status: "PENDING" }, select: { id: true }, take: 1 },
     },
   });
   const items = rows.map(({ returnRequests, ...b }) => ({ ...b, returnPending: returnRequests.length > 0 }));
   res.json({ items });
+});
+
+const RENEW_NOT_ALLOWED = { message: "Chỉ gia hạn được sách đang mượn và chưa quá hạn" };
+const RENEW_LIMIT = { message: "Sách này đã được gia hạn tối đa số lần cho phép" };
+
+// 2.3.3 Gia hạn +7 ngày, tối đa 1 lần, chỉ khi chưa quá hạn
+borrowsRouter.post("/:id/renew", authenticate, requireRole("READER"), async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(404).json(BORROW_MISSING);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw`SELECT id, reader_id, status, due_date, renew_count FROM borrows WHERE id = ${id} FOR UPDATE`;
+    if (rows.length === 0) return { status: 404, body: BORROW_MISSING };
+    const row = rows[0];
+    if (Number(row.reader_id) !== req.user.id) return { status: 403, body: NOT_OWNER };
+    if (row.status !== "BORROWING" || !row.due_date || new Date(row.due_date) < today()) {
+      return { status: 409, body: RENEW_NOT_ALLOWED };
+    }
+    if (Number(row.renew_count) >= MAX_RENEWALS) return { status: 409, body: RENEW_LIMIT };
+    const dueDate = new Date(new Date(row.due_date).getTime() + RENEW_DAYS * 86400000);
+    return { borrow: await tx.borrow.update({ where: { id }, data: { dueDate, renewCount: { increment: 1 } } }) };
+  });
+
+  if (result.body) return res.status(result.status).json(result.body);
+  res.json({ message: `Đã gia hạn thêm ${RENEW_DAYS} ngày`, borrow: { id, dueDate: result.borrow.dueDate, renewCount: result.borrow.renewCount } });
 });
 
 // 2.4.1 Tạo yêu cầu trả "Chờ xác nhận"; tồn kho và trạng thái đơn chỉ đổi khi nhân viên xác nhận (2.4.2)
