@@ -11,7 +11,8 @@ const item = {
   id: 5,
   status: 'BORROWING',
   borrowDate: '2026-10-10T00:00:00.000Z',
-  dueDate: '2026-10-24T00:00:00.000Z',
+  dueDate: new Date(Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 5)).toISOString(),
+  renewCount: 0,
   returnPending: false,
   book: { id: 4, title: 'Clean Code', author: 'Martin' },
 }
@@ -27,13 +28,48 @@ describe('MyBorrows', () => {
   it('lists borrowed books', async () => {
     renderPage()
     expect(await screen.findByText('Clean Code')).toBeInTheDocument()
-    expect(screen.getByText('Đang mượn')).toBeInTheDocument()
+    expect(screen.getByRole('cell', { name: /Đang mượn/ })).toBeInTheDocument()
   })
 
   it('shows an empty state', async () => {
     api.get.mockResolvedValue({ data: { items: [] } })
     renderPage()
-    expect(await screen.findByText('Bạn chưa có sách nào đang mượn')).toBeInTheDocument()
+    expect(await screen.findByText('Không có đơn mượn nào')).toBeInTheDocument()
+  })
+
+  it('shows days remaining and the renew button', async () => {
+    renderPage()
+    expect(await screen.findByText('Còn 5 ngày')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Gia hạn' })).toBeInTheDocument()
+  })
+
+  it('hides renew once renewed or overdue', async () => {
+    api.get.mockResolvedValue({ data: { items: [{ ...item, renewCount: 1 }, { ...item, id: 6, dueDate: '2020-01-01T00:00:00.000Z' }] } })
+    renderPage()
+    await screen.findAllByText('Clean Code')
+    expect(screen.queryByRole('button', { name: 'Gia hạn' })).not.toBeInTheDocument()
+  })
+
+  it('renews a borrow and reloads', async () => {
+    api.post.mockResolvedValue({ data: { message: 'Đã gia hạn thêm 7 ngày' } })
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Gia hạn' }))
+    expect(api.post).toHaveBeenCalledWith('/borrows/5/renew')
+    expect(await screen.findByText('Đã gia hạn thêm 7 ngày')).toBeInTheDocument()
+    expect(api.get).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows the reject reason for rejected borrows', async () => {
+    api.get.mockResolvedValue({ data: { items: [{ ...item, status: 'REJECTED', rejectReason: 'Hết sách', borrowDate: null, dueDate: null }] } })
+    renderPage()
+    expect(await screen.findByText('Lý do: Hết sách')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Xin trả sách' })).not.toBeInTheDocument()
+  })
+
+  it('filters by status', async () => {
+    renderPage()
+    await userEvent.selectOptions(await screen.findByLabelText('Trạng thái'), 'RETURNED')
+    expect(api.get).toHaveBeenLastCalledWith('/borrows/mine', { params: { status: 'RETURNED' } })
   })
 
   it('hides the button once a return request is pending', async () => {
