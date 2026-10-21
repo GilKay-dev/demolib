@@ -6,6 +6,7 @@ import { booksRouter } from "./routes/books.js";
 import { borrowsRouter } from "./routes/borrows.js";
 import { categoriesRouter } from "./routes/categories.js";
 import { meRouter } from "./routes/me.js";
+import { returnRequestsRouter } from "./routes/returnRequests.js";
 
 export const app = express();
 
@@ -25,6 +26,7 @@ app.use("/api/me", meRouter);
 app.use("/api/categories", categoriesRouter);
 app.use("/api/books", booksRouter);
 app.use("/api/borrows", borrowsRouter);
+app.use("/api/return-requests", returnRequestsRouter);
 
 app.use((err, req, res, _next) => {
   // Lỗi 4xx của body-parser (JSON sai định dạng, body quá lớn) là lỗi của client
