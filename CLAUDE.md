@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Stage 3 in progress (npm workspaces `client` + `server`). Done: 2.1.1 register (merged), 2.1.2 login (branch `feature/auth-login`). Track per-feature status in the PRD's "Trạng thái" column.
+Stage 3 in progress (npm workspaces `client` + `server`). Done: 2.1.1 register, 2.1.2 login (merged); 2.1.3 profile (branch `feature/profile`). Track per-feature status in the PRD's "Trạng thái" column.
 
 The full spec is `.claude/PRD.md` (written in Vietnamese). Read it before implementing any feature; feature codes like `2.3.1` refer to its sections.
 
@@ -85,8 +85,8 @@ Keep this section current (the `/wrap-up` command updates it). Only level 1–2 
 - `client/` — React + Vite frontend (`src/`, tests next to components, `src/test/setup.js`)
 - `server/` — Express backend; `src/app.js` (app, exported for Supertest), `src/index.js` (listen), `src/lib/prisma.js`
 - `server/prisma/schema.prisma` + `server/prisma.config.ts` — Prisma 7 schema mirroring the migrations (no `prisma migrate`; partial/expression indexes, CHECKs, triggers live only in SQL)
-- `server/src/routes/`, `validators/`, `middleware/validate.js`, `lib/token.js` — route modules (+ tests), Joi schemas, validation middleware, JWT signing
-- `client/src/pages/`, `context/AuthContext.jsx`, `lib/api.js` — pages (+ tests), auth state (token in localStorage), Axios instance
+- `server/src/routes/`, `validators/`, `middleware/validate.js`, `middleware/auth.js` (`authenticate`, `requireRole`), `lib/token.js`, `lib/password.js` — route modules (+ tests), Joi schemas, validation + JWT auth/role middleware, token signing, bcrypt helpers
+- `client/src/pages/`, `components/` (`Field`, `RequireAuth`), `context/AuthContext.jsx`, `lib/api.js` — pages (+ tests), shared form/route-guard components, auth state (token in localStorage; 401 → logout), Axios instance
 - `.claude/commands/` — project slash commands (commit, git-branch, merge, pull, push, wrap-up, learn-by-mistake, new-project)
 - `.mcp.json` — MCP server config (Supabase, Playwright, Postman, Vercel)
 - `common_errors.md` — (created by `/learn-by-mistake`) log of past mistakes and fixes, grouped by category; check it before repeating similar work

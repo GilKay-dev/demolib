@@ -32,23 +32,28 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(({ token, user }) => {
     setToken(token)
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ token, user }))
-    } catch {
-      // storage unavailable: session lasts until reload
-    }
     setAuth({ token, user })
   }, [])
 
   const logout = useCallback(() => {
     setToken(null)
-    try {
-      localStorage.removeItem(STORAGE_KEY)
-    } catch {
-      // ignore
-    }
     setAuth(null)
   }, [])
+
+  // Sau khi sửa hồ sơ: cập nhật user trong Context (updater thuần, lưu trữ nằm ở effect bên dưới)
+  const updateUser = useCallback((patch) => {
+    setAuth((prev) => (prev ? { ...prev, user: { ...prev.user, ...patch } } : prev))
+  }, [])
+
+  // Đồng bộ phiên đăng nhập vào localStorage mỗi khi thay đổi
+  useEffect(() => {
+    try {
+      if (auth) localStorage.setItem(STORAGE_KEY, JSON.stringify(auth))
+      else localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // storage unavailable: session lasts until reload
+    }
+  }, [auth])
 
   useEffect(() => {
     setUnauthorizedHandler(logout)
@@ -56,7 +61,7 @@ export function AuthProvider({ children }) {
   }, [logout])
 
   const user = auth?.user ?? null
-  const value = useMemo(() => ({ user, login, logout }), [user, login, logout])
+  const value = useMemo(() => ({ user, login, logout, updateUser }), [user, login, logout, updateUser])
 
   return <AuthContext value={value}>{children}</AuthContext>
 }
