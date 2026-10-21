@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Stage 3 in progress (npm workspaces `client` + `server`). Done: 2.1.1 register, 2.1.2 login; 2.1.3 profile, 2.2.1 categories, 2.2.2 add book (merged); 2.2.3 book list (branch `feature/book-list`). Track per-feature status in the PRD's "Trạng thái" column.
+Stage 3 in progress (npm workspaces `client` + `server`). Done: 2.1.1 register, 2.1.2 login; 2.1.3 profile, 2.2.1 categories, 2.2.2 add book (merged); 2.2.3 book list (merged); 2.2.4 book detail (branch `feature/book-detail`). Track per-feature status in the PRD's "Trạng thái" column.
 
 The full spec is `.claude/PRD.md` (written in Vietnamese). Read it before implementing any feature; feature codes like `2.3.1` refer to its sections.
 
@@ -90,7 +90,7 @@ Keep this section current (the `/wrap-up` command updates it). Only level 1–2 
 - `client/` — React + Vite frontend (`src/`, tests next to components, `src/test/setup.js`)
 - `server/` — Express backend; `src/app.js` (app, exported for Supertest), `src/index.js` (listen), `src/lib/prisma.js`
 - `server/prisma/schema.prisma` + `server/prisma.config.ts` — Prisma 7 schema mirroring the migrations (no `prisma migrate`; partial/expression indexes, CHECKs, triggers live only in SQL)
-- `server/src/routes/`, `validators/`, `middleware/validate.js`, `middleware/auth.js` (`authenticate`, `requireRole`), `middleware/rateLimit.js` (login / password-change limiters), `lib/token.js` (JWT carries a password fingerprint `pv`, so a password change revokes old tokens), `lib/password.js`, `test/auth.js` (token helper for tests) — route modules (+ tests), Joi schemas, validation + JWT auth/role middleware, token signing, bcrypt helpers
+- `server/src/routes/`, `validators/`, `middleware/validate.js`, `middleware/auth.js` (`authenticate`, `optionalAuthenticate`, `requireRole`), `middleware/rateLimit.js` (login / password-change limiters), `lib/token.js` (JWT carries a password fingerprint `pv`, so a password change revokes old tokens), `lib/password.js`, `test/auth.js` (token helper for tests) — route modules (+ tests), Joi schemas, validation + JWT auth/role middleware, token signing, bcrypt helpers
 - `client/src/pages/`, `components/` (`Field`, `RequireAuth`), `context/AuthContext.jsx`, `lib/api.js` — pages (+ tests), shared form/route-guard components, auth state (token in localStorage; 401 → logout), Axios instance
 - `.claude/commands/` — project slash commands (commit, git-branch, merge, pull, push, wrap-up, learn-by-mistake, new-project)
 - `.mcp.json` — MCP server config (Supabase, Playwright, Postman, Vercel)

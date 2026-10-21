@@ -29,6 +29,17 @@ export async function authenticate(req, res, next) {
   next();
 }
 
+// Cho endpoint công khai có thêm dữ liệu theo vai trò: token hợp lệ thì nạp req.user, thiếu/sai/hết hạn thì coi là khách
+export async function optionalAuthenticate(req, res, next) {
+  if (!req.headers.authorization) return next();
+  let rejected = false;
+  const probe = { status: () => ({ json: () => void (rejected = true) }) };
+  let passed = false;
+  await authenticate(req, probe, () => void (passed = true));
+  if (rejected || !passed) req.user = undefined;
+  next();
+}
+
 export const requireRole =
   (...roles) =>
   (req, res, next) =>

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
-import { authenticate, requireRole } from "../middleware/auth.js";
+import { authenticate, optionalAuthenticate, requireRole } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import { createBookSchema } from "../validators/book.js";
 
@@ -115,6 +115,55 @@ booksRouter.get("/", async (req, res) => {
   }
 
   res.json({ items: books.map(toListItem), page, pageSize: PAGE_SIZE, total, totalPages });
+});
+
+const detailSelect = {
+  id: true,
+  title: true,
+  author: true,
+  isbn: true,
+  publishYear: true,
+  description: true,
+  availableQuantity: true,
+  borrowedQuantity: true,
+  category: { select: { id: true, name: true } },
+};
+
+// 2.2.4 Chi tiết sách (công khai). Lịch sử mượn chỉ trả cho nhân viên thư viện
+booksRouter.get("/:id", optionalAuthenticate, async (req, res) => {
+  const id = /^\d+$/.test(req.params.id) ? Number(req.params.id) : null;
+  const book = id && id <= 2147483647 ? await prisma.book.findFirst({ where: { id, deletedAt: null }, select: detailSelect }) : null;
+  if (!book) return res.status(404).json({ message: "Không tìm thấy sách" });
+
+  const body = {
+    id: book.id,
+    title: book.title,
+    author: book.author,
+    isbn: book.isbn,
+    publishYear: book.publishYear,
+    description: book.description,
+    category: book.category,
+    availableQuantity: book.availableQuantity,
+    borrowedQuantity: book.borrowedQuantity,
+  };
+
+  if (req.user?.role === "LIBRARIAN") {
+    // Chỉ các đơn đã được xác nhận mới có ngày mượn / hạn trả
+    const borrows = await prisma.borrow.findMany({
+      where: { bookId: book.id, status: { in: ["BORROWING", "OVERDUE", "RETURNED"] } },
+      select: { id: true, borrowDate: true, dueDate: true, status: true, reader: { select: { id: true, name: true } } },
+      orderBy: [{ borrowDate: "desc" }, { id: "desc" }],
+    });
+    body.borrowHistory = borrows.map((b) => ({
+      id: b.id,
+      reader: b.reader,
+      borrowDate: b.borrowDate,
+      dueDate: b.dueDate,
+      status: b.status,
+    }));
+  }
+
+  res.json(body);
 });
 
 // 2.2.2 Thêm sách: total = available = số lượng, borrowed = 0 ("Có sẵn" suy ra từ available > 0)

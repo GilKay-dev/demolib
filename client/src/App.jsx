@@ -2,6 +2,7 @@ import { Link, Route, Routes } from 'react-router'
 import RequireAuth from './components/RequireAuth'
 import { useAuth } from './context/AuthContext'
 import BookCreate from './pages/BookCreate'
+import BookDetail from './pages/BookDetail'
 import BookList from './pages/BookList'
 import Categories from './pages/Categories'
 import Login from './pages/Login'
@@ -43,6 +44,7 @@ function App() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/books" element={<BookList />} />
+      <Route path="/books/:id" element={<BookDetail />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route
