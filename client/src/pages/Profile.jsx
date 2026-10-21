@@ -17,10 +17,12 @@ const formatMoney = (n) => `${n.toLocaleString('vi-VN')} ₫`
 function applyServerErrors(err, fields, setError, setFormError, fallback) {
   const data = err.response?.data
   if (data?.errors) {
+    const general = []
     for (const [field, message] of Object.entries(data.errors)) {
       if (fields.includes(field)) setError(field, { message })
-      else setFormError(message)
+      else general.push(message)
     }
+    if (general.length) setFormError(general.join('. '))
   } else {
     setFormError(data?.message ?? fallback)
   }
@@ -175,14 +177,32 @@ export default function Profile() {
   const [mode, setMode] = useState('view') // view | edit | password
   const [notice, setNotice] = useState('')
 
+  const [attempt, setAttempt] = useState(0)
+
   useEffect(() => {
+    let ignore = false
     api
       .get('/me')
-      .then(({ data }) => setProfile(data))
-      .catch(() => setLoadError('Không thể tải hồ sơ, vui lòng thử lại'))
-  }, [])
+      .then(({ data }) => !ignore && setProfile(data))
+      .catch(() => !ignore && setLoadError('Không thể tải hồ sơ, vui lòng thử lại'))
+    return () => {
+      ignore = true
+    }
+  }, [attempt])
 
-  if (loadError) return <main className="mx-auto max-w-md p-8"><p role="alert" className="text-red-600">{loadError}</p></main>
+  const retry = () => {
+    setLoadError('')
+    setAttempt((n) => n + 1)
+  }
+
+  if (loadError) {
+    return (
+      <main className="mx-auto max-w-md p-8">
+        <p role="alert" className="text-red-600">{loadError}</p>
+        <button type="button" onClick={retry} className="mt-4 rounded border border-slate-300 px-4 py-2">Thử lại</button>
+      </main>
+    )
+  }
   if (!profile) return <main className="mx-auto max-w-md p-8"><p>Đang tải...</p></main>
 
   const saved = ({ message, user }) => {

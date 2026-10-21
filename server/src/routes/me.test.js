@@ -65,6 +65,13 @@ describe("authentication", () => {
   });
 });
 
+describe("req.user", () => {
+  it("is loaded without the password hash", async () => {
+    await request(app).get("/api/me").set(auth());
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 5 }, omit: { passwordHash: true } });
+  });
+});
+
 describe("GET /api/me", () => {
   it("returns the profile with stats and no password hash", async () => {
     const res = await request(app).get("/api/me").set(auth());
@@ -105,6 +112,14 @@ describe("PUT /api/me", () => {
       const res = await request(app).put("/api/me").set(auth()).send({ ...valid, ...extra });
       expect(res.status).toBe(400);
     }
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a request that omits phone instead of wiping it", async () => {
+    const { phone: _omit, ...withoutPhone } = valid;
+    const res = await request(app).put("/api/me").set(auth()).send(withoutPhone);
+    expect(res.status).toBe(400);
+    expect(res.body.errors.phone).toBeTruthy();
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 

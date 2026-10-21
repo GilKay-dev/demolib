@@ -47,7 +47,8 @@ meRouter.put("/", validate(updateProfileSchema), async (req, res) => {
 
 meRouter.put("/password", validate(changePasswordSchema), async (req, res) => {
   const { currentPassword, newPassword } = req.body;
-  if (!(await comparePassword(currentPassword, req.user.passwordHash))) {
+  const { passwordHash } = await prisma.user.findUnique({ where: { id: req.user.id }, select: { passwordHash: true } });
+  if (!(await comparePassword(currentPassword, passwordHash))) {
     return res
       .status(400)
       .json({ message: "Mật khẩu hiện tại không đúng", errors: { currentPassword: "Mật khẩu hiện tại không đúng" } });

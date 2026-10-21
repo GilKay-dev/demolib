@@ -51,6 +51,25 @@ describe('Profile', () => {
     expect(await screen.findByText('Không thể tải hồ sơ, vui lòng thử lại')).toBeInTheDocument()
   })
 
+  it('retries loading after a failure', async () => {
+    api.get.mockRejectedValueOnce(new Error('x')).mockResolvedValueOnce({ data: profile })
+    const user = userEvent.setup()
+    renderProfile()
+    await user.click(await screen.findByRole('button', { name: 'Thử lại' }))
+    expect(await screen.findByText('a@b.com')).toBeInTheDocument()
+    expect(api.get).toHaveBeenCalledTimes(2)
+  })
+
+  it('combines several errors for fields the form does not have', async () => {
+    api.put.mockRejectedValue({ response: { status: 400, data: { errors: { userId: 'Trường không hợp lệ', role: 'Không được phép' } } } })
+    const user = userEvent.setup()
+    renderProfile()
+    await user.click(await screen.findByRole('button', { name: 'Cập nhật thông tin' }))
+    await user.type(screen.getByLabelText('Địa chỉ'), 'HN')
+    await user.click(screen.getByRole('button', { name: 'Lưu' }))
+    expect(await screen.findByText('Trường không hợp lệ. Không được phép')).toBeInTheDocument()
+  })
+
   describe('edit', () => {
     async function openEdit(user) {
       renderProfile()

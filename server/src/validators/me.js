@@ -6,7 +6,7 @@ export const updateProfileSchema = Joi.object({
     "string.max": "Tên tối đa 50 ký tự",
     "any.required": "Tên không được để trống",
   }),
-  phone: Joi.string().trim().pattern(/^0[0-9]{9}$/).allow("", null).messages({
+  phone: Joi.string().trim().pattern(/^0[0-9]{9}$/).allow("", null).required().messages({
     "string.pattern.base": "Số điện thoại không hợp lệ (10 chữ số, bắt đầu bằng 0)",
   }),
   address: Joi.string().trim().min(1).max(255).required().messages({

@@ -17,7 +17,8 @@ export async function authenticate(req, res, next) {
     throw err;
   }
 
-  const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+  // Không nạp passwordHash vào req.user để tránh vô tình lộ ra qua res.json/log
+  const user = await prisma.user.findUnique({ where: { id: payload.sub }, omit: { passwordHash: true } });
   if (!user || user.status !== "ACTIVE") return res.status(401).json(UNAUTHORIZED);
   req.user = user;
   next();
