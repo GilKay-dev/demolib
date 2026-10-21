@@ -65,6 +65,7 @@ The project follows Waterfall: finish each stage before starting the next.
    - The ERD goes in `design/ERD.md`, written in Mermaid (`erDiagram`).
    - Once the ERD is done, create the database on Supabase with the Supabase MCP (`apply_migration`). Keep the Prisma schema consistent with it.
 3. **Stage 3 — Implementation:** one feature at a time, following the PRD's dependency order (Part 3: auth → books → borrow/return → fines → user management → reports).
+   - Before writing any code, read `common_errors.md` (if it exists) to avoid repeating mistakes already made.
    - Create a separate git branch per feature (`/git-branch`).
    - After implementing a feature, test it with: unit tests, API tests (Postman via the Postman MCP — not installed yet), and E2E tests (Playwright via the Playwright MCP — not installed yet).
    - Merge into `main` (`/merge`) only after the tests pass and the feature has been reviewed.
