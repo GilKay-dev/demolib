@@ -326,7 +326,7 @@ Bảng dưới đây mô tả các phụ thuộc giữa các tính năng. Tính 
 | 2 | Đăng Nhập (Login) | 2.1.2 | 2.1.1 | Cần có tài khoản để đăng nhập | ✅ Hoàn thành |
 | 3 | Hồ Sơ Cá Nhân | 2.1.3 | 2.1.2 | Cần đăng nhập để xem hồ sơ | ✅ Hoàn thành |
 | 4 | Quản lý thể loại sách | 2.2.1 | 2.1.2 | Cần đăng nhập với vai trò nhân viên | ✅ Hoàn thành |
-| 5 | Thêm Sách Mới | 2.2.2 | 2.1.2, 2.2.1 | Cần đăng nhập và có thể loại sách | ⬜ Chưa làm |
+| 5 | Thêm Sách Mới | 2.2.2 | 2.1.2, 2.2.1 | Cần đăng nhập và có thể loại sách | ✅ Hoàn thành |
 | 6 | Xem Danh Sách Sách | 2.2.3 | - | Không cần đăng nhập, có thể làm song song | ⬜ Chưa làm |
 | 7 | Xem Chi Tiết Sách | 2.2.4 | 2.2.3 | Cần có danh sách sách trước | ⬜ Chưa làm |
 | 8 | Sửa & Xóa Sách | 2.2.5 | 2.1.2, 2.2.4 | Cần đăng nhập và xem chi tiết sách | ⬜ Chưa làm |

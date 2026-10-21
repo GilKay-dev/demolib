@@ -1,6 +1,7 @@
 import { Link, Route, Routes } from 'react-router'
 import RequireAuth from './components/RequireAuth'
 import { useAuth } from './context/AuthContext'
+import BookCreate from './pages/BookCreate'
 import Categories from './pages/Categories'
 import Login from './pages/Login'
 import Profile from './pages/Profile'
@@ -17,7 +18,12 @@ function Home() {
         <>
           <p className="mt-2 text-slate-700">Xin chào, {user.name}</p>
           {user.role === 'READER' && <Link to="/profile" className={linkClass}>Hồ sơ cá nhân</Link>}
-          {user.role === 'LIBRARIAN' && <Link to="/categories" className={linkClass}>Thể loại sách</Link>}
+          {user.role === 'LIBRARIAN' && (
+            <>
+              <Link to="/categories" className={linkClass}>Thể loại sách</Link>
+              <Link to="/books/new" className={linkClass}>Thêm sách mới</Link>
+            </>
+          )}
           <button type="button" onClick={logout} className={`${linkClass} cursor-pointer`}>Đăng xuất</button>
         </>
       ) : (
@@ -36,6 +42,14 @@ function App() {
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route
+        path="/books/new"
+        element={
+          <RequireAuth roles={['LIBRARIAN']}>
+            <BookCreate />
+          </RequireAuth>
+        }
+      />
       <Route
         path="/categories"
         element={
