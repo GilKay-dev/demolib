@@ -10,6 +10,7 @@ vi.mock("../lib/prisma.js", () => {
       user: { findUnique: vi.fn() },
       book: { findFirst: vi.fn(), count: vi.fn(), findMany: vi.fn() },
       category: { findFirst: vi.fn() },
+      borrow: { findMany: vi.fn() },
       $queryRaw: vi.fn(),
       $transaction: vi.fn((fn) => fn(tx)),
       tx,
@@ -345,5 +346,78 @@ describe("GET /api/books (public list)", () => {
       await request(app).get("/api/books").query({ q: "100%", sort: "popular" });
       expect(prisma.$queryRaw.mock.calls[0].slice(1)).toContain("%100\\%%");
     });
+  });
+});
+
+describe("GET /api/books/:id (public detail)", () => {
+  const detail = {
+    id: 7,
+    title: "Clean Code",
+    author: "Robert C. Martin",
+    isbn: "9780306406157",
+    publishYear: 2008,
+    description: "A handbook",
+    availableQuantity: 3,
+    borrowedQuantity: 2,
+    category: { id: 3, name: "Công nghệ" },
+  };
+  const history = [
+    { id: 5, borrowDate: new Date("2026-10-01"), dueDate: new Date("2026-10-15"), status: "BORROWING", reader: { id: 9, name: "An" } },
+  ];
+
+  beforeEach(() => {
+    prisma.book.findFirst.mockResolvedValue(detail);
+    prisma.borrow.findMany.mockResolvedValue(history);
+  });
+
+  it("returns the book to anonymous users without borrow history", async () => {
+    const res = await request(app).get("/api/books/7");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(detail);
+    expect(prisma.borrow.findMany).not.toHaveBeenCalled();
+    expect(prisma.book.findFirst.mock.calls[0][0].where).toEqual({ id: 7, deletedAt: null });
+  });
+
+  it("hides borrow history from readers", async () => {
+    prisma.user.findUnique.mockResolvedValue(fakeUser({ role: "READER" }));
+    const res = await request(app).get("/api/books/7").set(auth());
+    expect(res.status).toBe(200);
+    expect(res.body.borrowHistory).toBeUndefined();
+    expect(prisma.borrow.findMany).not.toHaveBeenCalled();
+  });
+
+  it("includes confirmed borrow history for a librarian", async () => {
+    const res = await request(app).get("/api/books/7").set(auth());
+    expect(res.status).toBe(200);
+    expect(res.body.borrowHistory).toEqual([
+      { id: 5, reader: { id: 9, name: "An" }, borrowDate: "2026-10-01T00:00:00.000Z", dueDate: "2026-10-15T00:00:00.000Z", status: "BORROWING" },
+    ]);
+    expect(prisma.borrow.findMany.mock.calls[0][0].where).toEqual({
+      bookId: 7,
+      status: { in: ["BORROWING", "OVERDUE", "RETURNED"] },
+    });
+  });
+
+  it("treats an invalid token as a guest instead of failing", async () => {
+    const res = await request(app).get("/api/books/7").set("Authorization", "Bearer garbage");
+    expect(res.status).toBe(200);
+    expect(res.body.borrowHistory).toBeUndefined();
+  });
+
+  it("treats a token of a disabled user as a guest", async () => {
+    prisma.user.findUnique.mockResolvedValue(fakeUser({ status: "DISABLED" }));
+    const res = await request(app).get("/api/books/7").set(auth());
+    expect(res.status).toBe(200);
+    expect(res.body.borrowHistory).toBeUndefined();
+  });
+
+  it("returns 404 for a missing or deleted book", async () => {
+    prisma.book.findFirst.mockResolvedValue(null);
+    expect((await request(app).get("/api/books/99")).status).toBe(404);
+  });
+
+  it.each(["abc", "0", "99999999999"])("returns 404 for id %s without querying", async (id) => {
+    expect((await request(app).get(`/api/books/${id}`)).status).toBe(404);
+    expect(prisma.book.findFirst).not.toHaveBeenCalled();
   });
 });

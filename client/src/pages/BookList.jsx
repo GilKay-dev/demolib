@@ -169,7 +169,9 @@ export default function BookList() {
             <tbody>
               {items.map((b) => (
                 <tr key={b.id} className="border-b border-slate-200">
-                  <td className="py-2 pr-3 font-medium">{b.title}</td>
+                  <td className="py-2 pr-3 font-medium">
+                    <Link to={`/books/${b.id}`} className="text-blue-700 underline">{b.title}</Link>
+                  </td>
                   <td className="py-2 pr-3">{b.author}</td>
                   <td className="py-2 pr-3">{b.publishYear}</td>
                   <td className="py-2 pr-3">{b.category.name}</td>
