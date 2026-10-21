@@ -152,3 +152,53 @@ borrowsRouter.post("/:id/reject", authenticate, requireRole("LIBRARIAN"), valida
   if (result.error) return res.status(result.status).json(result.error);
   res.json({ message: "Đã từ chối đơn mượn", borrow: { id: result.borrow.id, status: result.borrow.status } });
 });
+
+const NOT_OWNER = { message: "Không có quyền thao tác trên đơn mượn này" };
+const NOT_BORROWING = { message: "Chỉ yêu cầu trả được sách đang mượn" };
+const RETURN_DUPLICATE = { message: "Bạn đã gửi yêu cầu trả cho sách này" };
+
+// 2.4.1 Sách đang mượn / quá hạn của độc giả, kèm cờ đã gửi yêu cầu trả (2.3.3 sẽ mở rộng thành lịch sử đầy đủ)
+borrowsRouter.get("/mine", authenticate, requireRole("READER"), async (req, res) => {
+  const rows = await prisma.borrow.findMany({
+    where: { readerId: req.user.id, status: { in: ["BORROWING", "OVERDUE"] } },
+    orderBy: [{ dueDate: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      status: true,
+      borrowDate: true,
+      dueDate: true,
+      book: { select: { id: true, title: true, author: true } },
+      returnRequests: { where: { status: "PENDING" }, select: { id: true }, take: 1 },
+    },
+  });
+  const items = rows.map(({ returnRequests, ...b }) => ({ ...b, returnPending: returnRequests.length > 0 }));
+  res.json({ items });
+});
+
+// 2.4.1 Tạo yêu cầu trả "Chờ xác nhận"; tồn kho và trạng thái đơn chỉ đổi khi nhân viên xác nhận (2.4.2)
+borrowsRouter.post("/:id/return-requests", authenticate, requireRole("READER"), async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(404).json(BORROW_MISSING);
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw`SELECT id, reader_id, status FROM borrows WHERE id = ${id} FOR UPDATE`;
+      if (rows.length === 0) return { status: 404, body: BORROW_MISSING };
+      if (Number(rows[0].reader_id) !== req.user.id) return { status: 403, body: NOT_OWNER };
+      if (!["BORROWING", "OVERDUE"].includes(rows[0].status)) return { status: 409, body: NOT_BORROWING };
+      if (await tx.returnRequest.findFirst({ where: { borrowId: id, status: "PENDING" }, select: { id: true } })) {
+        return { status: 409, body: RETURN_DUPLICATE };
+      }
+      return { request: await tx.returnRequest.create({ data: { borrowId: id } }) };
+    });
+    if (result.body) return res.status(result.status).json(result.body);
+    res.status(201).json({
+      message: "Đã gửi yêu cầu trả, vui lòng mang sách đến thư viện",
+      returnRequest: { id: result.request.id, borrowId: id, status: result.request.status },
+    });
+  } catch (err) {
+    // Unique index (borrow_id) WHERE status = PENDING bắt trường hợp bấm hai lần đồng thời
+    if (err.code === "P2002") return res.status(409).json(RETURN_DUPLICATE);
+    throw err;
+  }
+});

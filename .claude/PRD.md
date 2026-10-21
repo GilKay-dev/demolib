@@ -333,7 +333,7 @@ Bảng dưới đây mô tả các phụ thuộc giữa các tính năng. Tính 
 | 9 | Mượn Sách (Độc Giả) | 2.3.1 | 2.1.2, 2.2.4 | Cần đăng nhập và xem chi tiết sách | ✅ Hoàn thành |
 | 10 | Mượn Sách (Nhân Viên) | 2.3.2 | 2.1.2, 2.2.4 | Cần đăng nhập và xem chi tiết sách. Có chức năng xác nhận & từ chối với lý do | ✅ Hoàn thành |
 | 11 | Xem Lịch Sử Mượn Sách | 2.3.3 | 2.1.2, 2.3.1 | Cần đăng nhập và có đơn mượn. Bao gồm xem lý do từ chối | ⬜ Chưa làm |
-| 12 | Yêu Cầu Trả Sách | 2.4.1 | 2.1.2, 2.3.1 | Cần đăng nhập và có sách đang mượn | ⬜ Chưa làm |
+| 12 | Yêu Cầu Trả Sách | 2.4.1 | 2.1.2, 2.3.1 | Cần đăng nhập và có sách đang mượn | ✅ Hoàn thành |
 | 13 | Xác Nhận Trả Sách | 2.4.2 | 2.1.2, 2.4.1 | Cần đăng nhập và có yêu cầu trả sách. Hỗ trợ 3 tình trạng: Bình thường/Hư hỏng/Mất | ⬜ Chưa làm |
 | 14 | Quản lý mức phạt | 2.5.1 | 2.1.2 | Cần đăng nhập với vai trò quản lý viên | ⬜ Chưa làm |
 | 15 | Xem & Thanh Toán Phạt (Độc Giả) | 2.5.2 | 2.1.2, 2.4.2, 2.5.1 | Cần đăng nhập, có phiếu phạt và mức phạt | ⬜ Chưa làm |
