@@ -17,6 +17,32 @@ async function fill(user, { email = 'a@b.com', name = 'An', password = 'password
 describe('Register', () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it('keeps the error out of the input label and links it with aria-describedby', async () => {
+    const user = userEvent.setup()
+    render(<Register />)
+    await fill(user, { email: 'abc' })
+    const input = await screen.findByLabelText('Email')
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(input).toHaveAccessibleDescription('Email không hợp lệ')
+  })
+
+  it('re-validates the confirmation when the password changes', async () => {
+    const user = userEvent.setup()
+    render(<Register />)
+    await fill(user)
+    expect(api.post).toHaveBeenCalledTimes(1)
+    await user.type(screen.getByLabelText('Mật khẩu'), 'x')
+    expect(await screen.findByText('Mật khẩu xác nhận không khớp')).toBeInTheDocument()
+  })
+
+  it('shows an error for a field the form does not have', async () => {
+    api.post.mockRejectedValue({ response: { data: { errors: { role: 'Trường không hợp lệ' } } } })
+    const user = userEvent.setup()
+    render(<Register />)
+    await fill(user)
+    expect(await screen.findByText('Trường không hợp lệ')).toBeInTheDocument()
+  })
+
   it('shows validation errors and does not call the API', async () => {
     const user = userEvent.setup()
     render(<Register />)
