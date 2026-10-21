@@ -1,0 +1,1 @@
+Automatically pull code from remote to local. If conflicts occur, suggest how to resolve them.

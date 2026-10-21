@@ -1,0 +1,29 @@
+node_modules/
+dist/
+coverage/
+*.log
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Prisma generated client
+server/src/generated/
+
+# Playwright
+test-results/
+playwright-report/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude local settings
+.claude/settings.local.json
+
+# MCP config contains the Postman API key
+.mcp.json

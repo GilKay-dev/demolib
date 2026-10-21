@@ -1,0 +1,1 @@
+Briefly summarize recent mistakes and fixes in `common_errors.md`, grouped by error category.

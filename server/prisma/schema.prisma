@@ -1,0 +1,223 @@
+// Khớp với db/migrations/ (nguồn sự thật cho schema là migration Supabase, xem design/ERD.md).
+// Không chạy `prisma migrate`; sau khi đổi DB chạy `prisma db pull` để đối chiếu.
+// Partial unique index, index theo biểu thức (lower(...)), CHECK và trigger updated_at
+// chỉ tồn tại ở DB, Prisma schema không biểu diễn được.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+  // Backend viết bằng JS: Node 24 chạy trực tiếp file .ts sinh ra (type stripping)
+  importFileExtension = "ts"
+}
+
+// URL kết nối nằm trong prisma.config.ts (Prisma 7)
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  READER
+  LIBRARIAN
+  ADMIN
+
+  @@map("user_role")
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+
+  @@map("user_status")
+}
+
+enum BorrowStatus {
+  PENDING
+  BORROWING
+  OVERDUE
+  RETURNED
+  REJECTED
+
+  @@map("borrow_status")
+}
+
+enum ReturnRequestStatus {
+  PENDING
+  CONFIRMED
+
+  @@map("return_request_status")
+}
+
+enum BookCondition {
+  NORMAL
+  DAMAGED
+  LOST
+
+  @@map("book_condition")
+}
+
+enum FineType {
+  LATE
+  DAMAGED
+  LOST
+
+  @@map("fine_type")
+}
+
+enum FineStatus {
+  UNPAID
+  PENDING
+  PAID
+  REJECTED
+
+  @@map("fine_status")
+}
+
+model User {
+  id           Int        @id @default(autoincrement())
+  email        String     @unique(map: "users_email_key") @db.VarChar(255)
+  passwordHash String     @map("password_hash")
+  name         String     @db.VarChar(50)
+  phone        String?    @db.VarChar(10)
+  address      String?    @db.VarChar(255)
+  role         UserRole   @default(READER)
+  status       UserStatus @default(PENDING)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  borrows                 Borrow[]        @relation("BorrowReader")
+  processedBorrows        Borrow[]        @relation("BorrowProcessedBy")
+  confirmedReturnRequests ReturnRequest[] @relation("ReturnRequestConfirmedBy")
+  createdFines            Fine[]          @relation("FineCreatedBy")
+  processedFines          Fine[]          @relation("FineProcessedBy")
+
+  @@map("users")
+}
+
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String    @db.VarChar(50)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz
+
+  books Book[]
+
+  @@map("categories")
+}
+
+model Book {
+  id                Int       @id @default(autoincrement())
+  categoryId        Int       @map("category_id")
+  title             String    @db.VarChar(100)
+  author            String    @db.VarChar(100)
+  isbn              String?   @db.VarChar(13)
+  publishYear       Int       @map("publish_year") @db.SmallInt
+  description       String    @db.VarChar(255)
+  totalQuantity     Int       @map("total_quantity")
+  availableQuantity Int       @map("available_quantity")
+  borrowedQuantity  Int       @default(0) @map("borrowed_quantity")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  borrows  Borrow[]
+
+  @@map("books")
+}
+
+model Borrow {
+  id              Int            @id @default(autoincrement())
+  readerId        Int            @map("reader_id")
+  bookId          Int            @map("book_id")
+  status          BorrowStatus   @default(PENDING)
+  requestedDays   Int            @default(14) @map("requested_days") @db.SmallInt
+  borrowDate      DateTime?      @map("borrow_date") @db.Date
+  dueDate         DateTime?      @map("due_date") @db.Date
+  renewCount      Int            @default(0) @map("renew_count") @db.SmallInt
+  returnDate      DateTime?      @map("return_date") @db.Date
+  returnCondition BookCondition? @map("return_condition")
+  rejectReason    String?        @map("reject_reason") @db.VarChar(255)
+  processedById   Int?           @map("processed_by")
+  processedAt     DateTime?      @map("processed_at") @db.Timestamptz
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  reader         User            @relation("BorrowReader", fields: [readerId], references: [id], onDelete: Restrict)
+  book           Book            @relation(fields: [bookId], references: [id], onDelete: Restrict)
+  processedBy    User?           @relation("BorrowProcessedBy", fields: [processedById], references: [id], onDelete: Restrict)
+  returnRequests ReturnRequest[]
+  fines          Fine[]
+
+  @@index([readerId, status], map: "borrows_reader_status_idx")
+  @@index([bookId, status], map: "borrows_book_status_idx")
+  @@index([status, dueDate], map: "borrows_status_due_idx")
+  @@index([createdAt], map: "borrows_created_at_idx")
+  @@index([processedById], map: "borrows_processed_by_idx")
+  @@map("borrows")
+}
+
+model ReturnRequest {
+  id            Int                 @id @default(autoincrement())
+  borrowId      Int                 @map("borrow_id")
+  status        ReturnRequestStatus @default(PENDING)
+  confirmedById Int?                @map("confirmed_by")
+  confirmedAt   DateTime?           @map("confirmed_at") @db.Timestamptz
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  borrow      Borrow @relation(fields: [borrowId], references: [id], onDelete: Cascade)
+  confirmedBy User?  @relation("ReturnRequestConfirmedBy", fields: [confirmedById], references: [id], onDelete: Restrict)
+
+  @@index([borrowId], map: "return_requests_borrow_idx")
+  @@index([status, createdAt], map: "return_requests_status_created_idx")
+  @@index([confirmedById], map: "return_requests_confirmed_by_idx")
+  @@map("return_requests")
+}
+
+model FineLevel {
+  id            Int       @id @default(autoincrement())
+  name          String    @db.VarChar(25)
+  amount        Decimal   @db.Decimal(12, 0)
+  effectiveDate DateTime  @default(dbgenerated("CURRENT_DATE")) @map("effective_date") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz
+
+  fines Fine[]
+
+  @@map("fine_levels")
+}
+
+model Fine {
+  id            Int        @id @default(autoincrement())
+  borrowId      Int        @map("borrow_id")
+  fineLevelId   Int?       @map("fine_level_id")
+  type          FineType
+  levelName     String     @map("level_name") @db.VarChar(25)
+  amount        Decimal    @db.Decimal(12, 0)
+  note          String?    @db.VarChar(500)
+  status        FineStatus @default(UNPAID)
+  finedDate     DateTime   @map("fined_date") @db.Date
+  markedPaidAt  DateTime?  @map("marked_paid_at") @db.Timestamptz
+  paidAt        DateTime?  @map("paid_at") @db.Timestamptz
+  rejectReason  String?    @map("reject_reason") @db.VarChar(255)
+  createdById   Int        @map("created_by")
+  processedById Int?       @map("processed_by")
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  borrow      Borrow     @relation(fields: [borrowId], references: [id], onDelete: Restrict)
+  fineLevel   FineLevel? @relation(fields: [fineLevelId], references: [id], onDelete: SetNull)
+  createdBy   User       @relation("FineCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  processedBy User?      @relation("FineProcessedBy", fields: [processedById], references: [id], onDelete: Restrict)
+
+  @@unique([borrowId, type], map: "fines_borrow_type_key")
+  @@index([status, createdAt], map: "fines_status_created_idx")
+  @@index([fineLevelId], map: "fines_fine_level_idx")
+  @@index([createdById], map: "fines_created_by_idx")
+  @@index([processedById], map: "fines_processed_by_idx")
+  @@map("fines")
+}
