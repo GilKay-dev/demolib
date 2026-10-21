@@ -166,6 +166,76 @@ booksRouter.get("/:id", optionalAuthenticate, async (req, res) => {
   res.json(body);
 });
 
+const parseId = (raw) => (/^\d+$/.test(raw) && Number(raw) <= 2147483647 ? Number(raw) : null);
+const BOOK_MISSING = { message: "Không tìm thấy sách" };
+// Đơn còn hoạt động: chờ xác nhận, đang mượn, quá hạn (chặn xóa sách)
+const ACTIVE_BORROWS = ["PENDING", "BORROWING", "OVERDUE"];
+
+const isIsbnConflict = (err) => err.code === "P2002" && (!err.meta?.target || String(err.meta.target).includes("isbn"));
+
+// 2.2.5 Sửa sách: thay toàn bộ thông tin; "quantity" là tổng số bản, không được nhỏ hơn số đang mượn
+booksRouter.put(
+  "/:id",
+  authenticate,
+  requireRole("LIBRARIAN"),
+  (req, res, next) => validate(createBookSchema())(req, res, next),
+  async (req, res) => {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(404).json(BOOK_MISSING);
+    const { title, author, publishYear, isbn, categoryId, description, quantity } = req.body;
+
+    if (isbn && (await prisma.book.findFirst({ where: { isbn, deletedAt: null, id: { not: id } }, select: { id: true } }))) {
+      return res.status(409).json(ISBN_TAKEN);
+    }
+
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        // Khóa dòng sách để số lượng mượn không đổi giữa lúc kiểm tra và cập nhật
+        const locked = await tx.$queryRaw`SELECT borrowed_quantity FROM books WHERE id = ${id} AND deleted_at IS NULL FOR UPDATE`;
+        if (locked.length === 0) return { error: "book" };
+        const borrowed = Number(locked[0].borrowed_quantity);
+        if (quantity < borrowed) return { error: "quantity", borrowed };
+        const cat = await tx.$queryRaw`SELECT id FROM categories WHERE id = ${categoryId} AND deleted_at IS NULL FOR SHARE`;
+        if (cat.length === 0) return { error: "category" };
+        const book = await tx.book.update({
+          where: { id },
+          data: { title, author, isbn, publishYear, description, categoryId, totalQuantity: quantity, availableQuantity: quantity - borrowed },
+        });
+        return { book };
+      });
+      if (result.error === "book") return res.status(404).json(BOOK_MISSING);
+      if (result.error === "category") return res.status(400).json(CATEGORY_MISSING);
+      if (result.error === "quantity") {
+        const message = `Số lượng không được nhỏ hơn số sách đang mượn (${result.borrowed})`;
+        return res.status(400).json({ message, errors: { quantity: message } });
+      }
+      res.json({ message: "Cập nhật sách thành công", book: toBook(result.book) });
+    } catch (err) {
+      if (isIsbnConflict(err)) return res.status(409).json(ISBN_TAKEN);
+      throw err;
+    }
+  },
+);
+
+// 2.2.5 Xóa sách (xóa mềm): chỉ khi không còn đơn mượn hoạt động
+booksRouter.delete("/:id", authenticate, requireRole("LIBRARIAN"), async (req, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(404).json(BOOK_MISSING);
+
+  const result = await prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw`SELECT id FROM books WHERE id = ${id} AND deleted_at IS NULL FOR UPDATE`;
+    if (locked.length === 0) return "missing";
+    const active = await tx.borrow.count({ where: { bookId: id, status: { in: ACTIVE_BORROWS } } });
+    if (active > 0) return "active";
+    await tx.book.update({ where: { id }, data: { deletedAt: new Date() } });
+    return "ok";
+  });
+
+  if (result === "missing") return res.status(404).json(BOOK_MISSING);
+  if (result === "active") return res.status(409).json({ message: "Không thể xóa sách đang có đơn mượn hoạt động" });
+  res.json({ message: "Xóa sách thành công" });
+});
+
 // 2.2.2 Thêm sách: total = available = số lượng, borrowed = 0 ("Có sẵn" suy ra từ available > 0)
 booksRouter.post(
   "/",
