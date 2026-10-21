@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Stage 3 in progress (npm workspaces `client` + `server`). Done: 2.1.1 register, 2.1.2 login (merged); 2.1.3 profile (branch `feature/profile`). Track per-feature status in the PRD's "Trạng thái" column.
+Stage 3 in progress (npm workspaces `client` + `server`). Done: 2.1.1 register, 2.1.2 login; 2.1.3 profile (merged); 2.2.1 categories (branch `feature/categories`). Track per-feature status in the PRD's "Trạng thái" column.
 
 The full spec is `.claude/PRD.md` (written in Vietnamese). Read it before implementing any feature; feature codes like `2.3.1` refer to its sections.
 
