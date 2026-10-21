@@ -6,9 +6,10 @@ export const MAX_QUANTITY = 100000;
 
 // ISBN tùy chọn: rỗng/null -> null; có giá trị thì chuẩn hóa và kiểm tra checksum
 const isbn = Joi.string()
-  .allow("", null)
+  .empty(["", null]) // rỗng/null coi như không nhập
+  .default(null)
   .custom((value, helpers) => {
-    if (value === null || value.trim() === "") return null;
+    if (value.trim() === "") return null;
     const normalized = normalizeIsbn(value);
     return isValidIsbn(normalized) ? normalized : helpers.message(ISBN_INVALID);
   })

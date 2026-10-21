@@ -29,8 +29,7 @@ booksRouter.post(
   requireRole("LIBRARIAN"),
   (req, res, next) => validate(createBookSchema())(req, res, next),
   async (req, res) => {
-    const { title, author, publishYear, categoryId, description, quantity } = req.body;
-    const isbn = req.body.isbn || null; // "" (allow của Joi bỏ qua custom) và thiếu đều thành null
+    const { title, author, publishYear, isbn, categoryId, description, quantity } = req.body;
 
     if (isbn && (await prisma.book.findFirst({ where: { isbn, deletedAt: null }, select: { id: true } }))) {
       return res.status(409).json(ISBN_TAKEN);
@@ -59,7 +58,11 @@ booksRouter.post(
       res.status(201).json({ message: "Thêm sách thành công", book: toBook(book) });
     } catch (err) {
       // Hai request cùng ISBN đồng thời: unique index bắt request thứ hai
-      if (err.code === "P2002") return res.status(409).json(ISBN_TAKEN);
+      // Chỉ coi là trùng ISBN khi đúng cột isbn (hoặc driver không báo cột vi phạm)
+      const target = err.meta?.target;
+      if (err.code === "P2002" && (!target || String(target).includes("isbn"))) {
+        return res.status(409).json(ISBN_TAKEN);
+      }
       throw err;
     }
   },

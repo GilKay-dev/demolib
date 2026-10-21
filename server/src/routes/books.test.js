@@ -89,6 +89,18 @@ describe("POST /api/books", () => {
     expect(prisma.book.findFirst).not.toHaveBeenCalled();
   });
 
+  it.each(["", "   ", null])("treats a blank ISBN (%j) as none, validated in the schema", async (blank) => {
+    const res = await request(app).post("/api/books").set(auth()).send({ ...valid, isbn: blank });
+    expect(res.status).toBe(201);
+    expect(prisma.tx.book.create.mock.calls[0][0].data.isbn).toBeNull();
+  });
+
+  it("treats an omitted ISBN as none", async () => {
+    const { isbn: _omit, ...withoutIsbn } = valid;
+    expect((await request(app).post("/api/books").set(auth()).send(withoutIsbn)).status).toBe(201);
+    expect(prisma.tx.book.create.mock.calls[0][0].data.isbn).toBeNull();
+  });
+
   it("accepts the boundary values", async () => {
     const res = await request(app)
       .post("/api/books")
@@ -158,6 +170,14 @@ describe("POST /api/books", () => {
     expect(res.body.errors.isbn).toBe("ISBN đã tồn tại");
     expect(prisma.book.findFirst.mock.calls[0][0].where).toEqual({ isbn: "9780306406157", deletedAt: null });
     expect(prisma.tx.book.create).not.toHaveBeenCalled();
+  });
+
+  it("does not report a unique violation on another column as a duplicate ISBN", async () => {
+    prisma.tx.book.create.mockRejectedValue(Object.assign(new Error("dup"), { code: "P2002", meta: { target: ["other"] } }));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await request(app).post("/api/books").set(auth()).send(valid);
+    spy.mockRestore();
+    expect(res.status).toBe(500);
   });
 
   it("returns 409 when a concurrent request hits the unique index", async () => {

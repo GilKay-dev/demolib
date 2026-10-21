@@ -119,6 +119,25 @@ describe('BookCreate', () => {
     expect(screen.getByLabelText('Tên sách')).toHaveValue('')
   })
 
+  it('measures length after trimming, like the server', async () => {
+    api.post.mockResolvedValue({ data: { book: { id: 1, title: 'T' } } })
+    const user = userEvent.setup()
+    await renderPage()
+    await fillValid(user, { title: 'a'.repeat(100) + '   ' })
+    await submit(user)
+    expect(await screen.findByRole('status')).toBeInTheDocument()
+    expect(screen.queryByText('Tên sách tối đa 100 ký tự')).not.toBeInTheDocument()
+  })
+
+  it('rejects a title that is still too long after trimming', async () => {
+    const user = userEvent.setup()
+    await renderPage()
+    await user.type(screen.getByLabelText('Tên sách'), 'a'.repeat(101))
+    await submit(user)
+    expect(await screen.findByText('Tên sách tối đa 100 ký tự')).toBeInTheDocument()
+    expect(api.post).not.toHaveBeenCalled()
+  })
+
   it('allows an empty ISBN', async () => {
     api.post.mockResolvedValue({ data: { book: { id: 1, title: 'T' } } })
     const user = userEvent.setup()

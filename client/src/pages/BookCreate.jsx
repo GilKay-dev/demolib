@@ -8,10 +8,20 @@ import { isValidIsbn } from '../lib/isbn'
 
 const FIELDS = ['title', 'author', 'publishYear', 'isbn', 'categoryId', 'description', 'quantity']
 const MAX_QUANTITY = 100000
-const currentYear = new Date().getFullYear()
-const YEAR_MESSAGE = `Năm xuất bản phải từ 1900 đến ${currentYear}`
+
+// Tính tại lúc validate (không cố định lúc tải module), giống server
+const currentYear = () => new Date().getFullYear()
 
 const required = (message) => (v) => String(v).trim() !== '' || message
+
+// Giống server: cắt khoảng trắng rồi mới kiểm tra rỗng / độ dài
+const text = (emptyMessage, max, tooLongMessage) => ({
+  validate: (v) => {
+    const t = v.trim()
+    if (t === '') return emptyMessage
+    return t.length <= max || tooLongMessage
+  },
+})
 
 export default function BookCreate() {
   const [categories, setCategories] = useState(null)
@@ -99,20 +109,14 @@ export default function BookCreate() {
           <input
             {...a11y('title')}
             className={inputClass}
-            {...register('title', {
-              validate: required('Tên sách không được để trống'),
-              maxLength: { value: 100, message: 'Tên sách tối đa 100 ký tự' },
-            })}
+            {...register('title', text('Tên sách không được để trống', 100, 'Tên sách tối đa 100 ký tự'))}
           />
         </Field>
         <Field id="author" label="Tác giả" error={errors.author?.message}>
           <input
             {...a11y('author')}
             className={inputClass}
-            {...register('author', {
-              validate: required('Tác giả không được để trống'),
-              maxLength: { value: 100, message: 'Tác giả tối đa 100 ký tự' },
-            })}
+            {...register('author', text('Tác giả không được để trống', 100, 'Tác giả tối đa 100 ký tự'))}
           />
         </Field>
         <Field id="publishYear" label="Năm xuất bản" error={errors.publishYear?.message}>
@@ -123,8 +127,9 @@ export default function BookCreate() {
             {...register('publishYear', {
               validate: (v) => {
                 if (String(v).trim() === '') return 'Năm xuất bản không được để trống'
+                const year = currentYear()
                 const n = Number(v)
-                return (Number.isInteger(n) && n >= 1900 && n <= currentYear) || YEAR_MESSAGE
+                return (Number.isInteger(n) && n >= 1900 && n <= year) || `Năm xuất bản phải từ 1900 đến ${year}`
               },
             })}
           />
@@ -155,10 +160,7 @@ export default function BookCreate() {
             rows={3}
             {...a11y('description')}
             className={inputClass}
-            {...register('description', {
-              validate: required('Mô tả không được để trống'),
-              maxLength: { value: 255, message: 'Mô tả tối đa 255 ký tự' },
-            })}
+            {...register('description', text('Mô tả không được để trống', 255, 'Mô tả tối đa 255 ký tự'))}
           />
         </Field>
         <Field id="quantity" label="Số lượng bản sách" error={errors.quantity?.message}>
