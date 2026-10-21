@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Stage 3 in progress (npm workspaces `client` + `server`). Done: 2.1.1 register, 2.1.2 login; 2.1.3 profile, 2.2.1 categories, 2.2.2 add book (merged); 2.2.3 book list (merged); 2.2.4 book detail (merged); 2.2.5 edit/delete book (merged); 2.3.1 reader borrow request (merged); 2.3.2 staff confirm/reject (merged); 2.3.3 borrow history + renew (merged); 2.4.1 reader return request (merged); 2.4.2 staff confirm return (merged); 2.5.1 fine levels admin (merged). Track per-feature status in the PRD's "Trạng thái" column.
+Stage 3 in progress (npm workspaces `client` + `server`). Done: 2.1.1 register, 2.1.2 login; 2.1.3 profile, 2.2.1 categories, 2.2.2 add book (merged); 2.2.3 book list (merged); 2.2.4 book detail (merged); 2.2.5 edit/delete book (merged); 2.3.1 reader borrow request (merged); 2.3.2 staff confirm/reject (merged); 2.3.3 borrow history + renew (merged); 2.4.1 reader return request (merged); 2.4.2 staff confirm return (merged); 2.5.1 fine levels admin (merged); 2.5.2 reader fines view + mark paid (merged). Track per-feature status in the PRD's "Trạng thái" column.
 
 The full spec is `.claude/PRD.md` (written in Vietnamese). Read it before implementing any feature; feature codes like `2.3.1` refer to its sections.
 
