@@ -1,5 +1,5 @@
-import bcrypt from "bcryptjs";
 import { Router } from "express";
+import { comparePassword, hashPassword } from "../lib/password.js";
 import { prisma } from "../lib/prisma.js";
 import { validate } from "../middleware/validate.js";
 import { signToken } from "../lib/token.js";
@@ -12,14 +12,12 @@ const INACTIVE = {
   PENDING: "Tài khoản đang chờ quản lý viên kích hoạt",
   DISABLED: "Tài khoản đã bị vô hiệu hóa",
 };
-// Hash giả để so sánh khi email không tồn tại, tránh lộ email qua thời gian phản hồi
-const DUMMY_HASH = bcrypt.hashSync("dummy-password", 10);
 
 // 2.1.2 Đăng nhập: trả JWT 24h
 authRouter.post("/login", validate(loginSchema), async (req, res) => {
   const { email, password } = req.body;
   const user = await prisma.user.findUnique({ where: { email } });
-  const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
+  const ok = await comparePassword(password, user?.passwordHash);
   if (!user || !ok) return res.status(401).json(BAD_CREDENTIALS);
   if (user.status !== "ACTIVE") return res.status(403).json({ message: INACTIVE[user.status] });
 
@@ -41,7 +39,7 @@ authRouter.post("/register", validate(registerSchema), async (req, res) => {
 
   try {
     const user = await prisma.user.create({
-      data: { email, name, passwordHash: await bcrypt.hash(password, 10), role: "READER", status: "PENDING" },
+      data: { email, name, passwordHash: await hashPassword(password), role: "READER", status: "PENDING" },
       select: { id: true, email: true, name: true, role: true, status: true },
     });
     res.status(201).json({

@@ -3,10 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../context/AuthContext'
-import { api } from '../lib/api'
+import { api, setToken } from '../lib/api'
 import Login from './Login'
 
-vi.mock('../lib/api', () => ({ api: { post: vi.fn(), defaults: { headers: { common: {} } } } }))
+vi.mock('../lib/api', () => ({
+  api: { post: vi.fn() },
+  setToken: vi.fn(),
+  setUnauthorizedHandler: vi.fn(),
+}))
 
 const navigate = vi.fn()
 vi.mock('react-router', async (orig) => ({ ...(await orig()), useNavigate: () => navigate }))
@@ -49,7 +53,7 @@ describe('Login', () => {
     await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith('/'))
     expect(api.post).toHaveBeenCalledWith('/auth/login', { email: 'a@b.com', password: 'password1' })
     expect(JSON.parse(localStorage.getItem('auth')).token).toBe('jwt')
-    expect(api.defaults.headers.common.Authorization).toBe('Bearer jwt')
+    expect(setToken).toHaveBeenCalledWith('jwt')
   })
 
   it.each([

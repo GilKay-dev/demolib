@@ -12,6 +12,37 @@ process.env.JWT_SECRET = "test-secret";
 const { default: bcrypt } = await import("bcryptjs");
 const { default: jwt } = await import("jsonwebtoken");
 
+describe("JWT secret", () => {
+  it.each([null, "", "change-me"])("rejects %j", async (secret) => {
+    const { assertJwtSecret } = await import("../lib/token.js");
+    expect(() => assertJwtSecret(secret)).toThrow(/JWT_SECRET/);
+  });
+
+  it("returns 500 on login when the secret is the placeholder", async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 1, email: "a@b.com", name: "A", role: "READER", status: "ACTIVE",
+      passwordHash: bcrypt.hashSync("password1", 4),
+    });
+    process.env.JWT_SECRET = "change-me";
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await request(app).post("/api/auth/login").send({ email: "a@b.com", password: "password1" });
+    process.env.JWT_SECRET = "test-secret";
+    spy.mockRestore();
+    expect(res.status).toBe(500);
+    expect(res.body.token).toBeUndefined();
+  });
+});
+
+describe("error handler", () => {
+  it("does not mask a non-parser error that carries a 4xx status", async () => {
+    prisma.user.findUnique.mockRejectedValue(Object.assign(new Error("upstream"), { status: 404 }));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await request(app).post("/api/auth/login").send({ email: "a@b.com", password: "password1" });
+    spy.mockRestore();
+    expect(res.status).toBe(500);
+  });
+});
+
 describe("POST /api/auth/login", () => {
   const creds = { email: " Reader@Example.COM ", password: "password1" };
   const dbUser = (patch = {}) => ({

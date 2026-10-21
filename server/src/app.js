@@ -17,8 +17,10 @@ app.use("/api/auth", authRouter);
 
 app.use((err, req, res, _next) => {
   // Lỗi 4xx của body-parser (JSON sai định dạng, body quá lớn) là lỗi của client
+  if (res.headersSent) return _next(err);
+  // Chỉ tin lỗi parse body của Express (err.type), không phải mọi lỗi có status 4xx
   const status = err.status ?? err.statusCode;
-  if (status >= 400 && status < 500) {
+  if (err.type && Number.isInteger(status) && status >= 400 && status < 500) {
     return res.status(status).json({ message: status === 413 ? "Dữ liệu quá lớn" : "Yêu cầu không hợp lệ" });
   }
   console.error(err);
