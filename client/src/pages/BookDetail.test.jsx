@@ -49,6 +49,29 @@ describe('BookDetail', () => {
     expect(screen.queryByText('Lịch sử mượn')).not.toBeInTheDocument()
   })
 
+  it('offers guests a login link', async () => {
+    api.get.mockResolvedValue({ data: book })
+    renderAt()
+    expect(await screen.findByRole('link', { name: 'Đăng nhập để mượn sách' })).toBeInTheDocument()
+  })
+
+  it('shows the borrow button to readers', async () => {
+    useAuth.mockReturnValue({ user: { id: 1, role: 'READER' } })
+    api.get.mockImplementation(async (url) => ({ data: url === '/borrows/eligibility' ? { eligible: true } : book }))
+    renderAt()
+    expect(await screen.findByRole('button', { name: 'Mượn sách' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Đăng nhập để mượn sách' })).not.toBeInTheDocument()
+  })
+
+  it('shows no borrow controls to librarians', async () => {
+    useAuth.mockReturnValue({ user: { id: 2, role: 'LIBRARIAN' } })
+    api.get.mockResolvedValue({ data: { ...book, borrowHistory: [] } })
+    renderAt()
+    await screen.findByRole('heading', { name: 'Clean Code' })
+    expect(screen.queryByRole('button', { name: 'Mượn sách' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Đăng nhập để mượn sách' })).not.toBeInTheDocument()
+  })
+
   it('shows the borrow history for staff', async () => {
     api.get.mockResolvedValue({
       data: {

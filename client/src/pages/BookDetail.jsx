@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api } from '../lib/api'
+import BorrowPanel from '../components/BorrowPanel'
 import { useAuth } from '../context/AuthContext'
 
 const STATUS_LABELS = { BORROWING: 'Đang mượn', OVERDUE: 'Quá hạn', RETURNED: 'Đã trả' }
@@ -18,7 +19,8 @@ export default function BookDetail() {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const navigate = useNavigate()
-  const isLibrarian = useAuth()?.user?.role === 'LIBRARIAN'
+  const user = useAuth()?.user
+  const isLibrarian = user?.role === 'LIBRARIAN'
 
   const remove = async () => {
     setDeleting(true)
@@ -87,6 +89,15 @@ export default function BookDetail() {
             <dt className="text-slate-600">Mô tả</dt>
             <dd className="whitespace-pre-line">{book.description}</dd>
           </dl>
+
+          {!user && (
+            <p className="mb-6">
+              <Link to="/login" state={{ from: `/books/${book.id}` }} className="text-blue-700 underline">
+                Đăng nhập để mượn sách
+              </Link>
+            </p>
+          )}
+          {user?.role === 'READER' && <BorrowPanel bookId={book.id} />}
 
           {isLibrarian && (
             <div className="mb-6">
