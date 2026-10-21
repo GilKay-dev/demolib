@@ -8,7 +8,9 @@ vi.mock("../lib/prisma.js", () => {
   return {
     prisma: {
       user: { findUnique: vi.fn() },
-      book: { findFirst: vi.fn() },
+      book: { findFirst: vi.fn(), count: vi.fn(), findMany: vi.fn() },
+      category: { findFirst: vi.fn() },
+      borrow: { groupBy: vi.fn() },
       $transaction: vi.fn((fn) => fn(tx)),
       tx,
     },
@@ -183,5 +185,144 @@ describe("POST /api/books", () => {
   it("returns 409 when a concurrent request hits the unique index", async () => {
     prisma.tx.book.create.mockRejectedValue(Object.assign(new Error("dup"), { code: "P2002" }));
     expect((await request(app).post("/api/books").set(auth()).send(valid)).status).toBe(409);
+  });
+});
+
+describe("GET /api/books (public list)", () => {
+  const row = (id, over = {}) => ({
+    id,
+    title: `Sách ${id}`,
+    author: "Tác giả",
+    publishYear: 2000,
+    availableQuantity: 2,
+    borrowedQuantity: 1,
+    category: { id: 3, name: "Công nghệ" },
+    ...over,
+  });
+  const findArgs = () => prisma.book.findMany.mock.calls[0][0];
+
+  beforeEach(() => {
+    prisma.book.count.mockResolvedValue(25);
+    prisma.book.findMany.mockResolvedValue([row(1), row(2)]);
+    prisma.category.findFirst.mockResolvedValue({ id: 3 });
+    prisma.borrow.groupBy.mockResolvedValue([]);
+  });
+
+  it("needs no login and returns the listed fields plus paging info", async () => {
+    const res = await request(app).get("/api/books");
+    expect(res.status).toBe(200);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    expect(res.body).toMatchObject({ page: 1, pageSize: 10, total: 25, totalPages: 3 });
+    expect(res.body.items[0]).toEqual({
+      id: 1,
+      title: "Sách 1",
+      author: "Tác giả",
+      publishYear: 2000,
+      category: { id: 3, name: "Công nghệ" },
+      availableQuantity: 2,
+      borrowedQuantity: 1,
+    });
+  });
+
+  it("only lists books that are not deleted, 10 per page, sorted by title by default", async () => {
+    await request(app).get("/api/books");
+    expect(findArgs()).toMatchObject({
+      where: { deletedAt: null },
+      orderBy: [{ title: "asc" }, { id: "asc" }],
+      skip: 0,
+      take: 10,
+    });
+  });
+
+  it("searches title or author case-insensitively on the trimmed query", async () => {
+    await request(app).get("/api/books").query({ q: "  Code " });
+    expect(findArgs().where.OR).toEqual([
+      { title: { contains: "Code", mode: "insensitive" } },
+      { author: { contains: "Code", mode: "insensitive" } },
+    ]);
+  });
+
+  it("ignores an empty or repeated q", async () => {
+    await request(app).get("/api/books?q=%20%20");
+    expect(findArgs().where.OR).toBeUndefined();
+    prisma.book.findMany.mockClear();
+    await request(app).get("/api/books?q=a&q=b");
+    expect(findArgs().where.OR).toBeUndefined();
+  });
+
+  it("filters by an existing category", async () => {
+    await request(app).get("/api/books?categoryId=3");
+    expect(prisma.category.findFirst.mock.calls[0][0].where).toEqual({ id: 3, deletedAt: null });
+    expect(findArgs().where.categoryId).toBe(3);
+  });
+
+  it.each(["999", "abc", "-1", "99999999999999"])("drops the category filter for %s", async (id) => {
+    prisma.category.findFirst.mockResolvedValue(null);
+    const res = await request(app).get("/api/books").query({ categoryId: id });
+    expect(res.status).toBe(200);
+    expect(findArgs().where.categoryId).toBeUndefined();
+  });
+
+  it("sorts by newest publish year", async () => {
+    await request(app).get("/api/books?sort=year");
+    expect(findArgs().orderBy[0]).toEqual({ publishYear: "desc" });
+  });
+
+  it("falls back to title order for an unknown sort", async () => {
+    await request(app).get("/api/books?sort=bogus");
+    expect(findArgs().orderBy).toEqual([{ title: "asc" }, { id: "asc" }]);
+  });
+
+  it("paginates with skip", async () => {
+    const res = await request(app).get("/api/books?page=2");
+    expect(res.body.page).toBe(2);
+    expect(findArgs().skip).toBe(10);
+  });
+
+  it.each(["0", "-3", "abc", "1.5", ""])("uses page 1 for page=%j", async (page) => {
+    const res = await request(app).get("/api/books").query({ page });
+    expect(res.body.page).toBe(1);
+  });
+
+  it("moves to the last page that has data when page is too large", async () => {
+    const res = await request(app).get("/api/books?page=99");
+    expect(res.body.page).toBe(3);
+    expect(findArgs().skip).toBe(20);
+  });
+
+  it("returns an empty first page when nothing matches", async () => {
+    prisma.book.count.mockResolvedValue(0);
+    prisma.book.findMany.mockResolvedValue([]);
+    const res = await request(app).get("/api/books?q=zzz&page=4");
+    expect(res.body).toMatchObject({ items: [], page: 1, total: 0, totalPages: 1 });
+  });
+
+  describe("sort=popular", () => {
+    it("orders by confirmed borrow count desc, then title, and pages the result", async () => {
+      const all = [1, 2, 3, 4].map((id) => ({ id, title: `Sách ${id}` }));
+      prisma.book.count.mockResolvedValue(4);
+      prisma.book.findMany.mockResolvedValueOnce(all).mockResolvedValueOnce([row(3), row(1), row(2), row(4)]);
+      prisma.borrow.groupBy.mockResolvedValue([
+        { bookId: 3, _count: { _all: 9 } },
+        { bookId: 2, _count: { _all: 1 } },
+        { bookId: 1, _count: { _all: 1 } },
+      ]);
+      const res = await request(app).get("/api/books?sort=popular");
+      expect(res.body.items.map((b) => b.id)).toEqual([3, 1, 2, 4]);
+      expect(prisma.borrow.groupBy.mock.calls[0][0].where).toEqual({
+        bookId: { in: [1, 2, 3, 4] },
+        status: { in: ["BORROWING", "OVERDUE", "RETURNED"] },
+      });
+    });
+
+    it("applies the same search/category filter and returns page 2 of the ranking", async () => {
+      const all = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, title: `S${String(i + 1).padStart(2, "0")}` }));
+      prisma.book.count.mockResolvedValue(12);
+      prisma.book.findMany.mockResolvedValueOnce(all).mockResolvedValueOnce([row(11), row(12)]);
+      const res = await request(app).get("/api/books?sort=popular&page=2&q=s&categoryId=3");
+      expect(prisma.book.findMany.mock.calls[0][0].where).toMatchObject({ categoryId: 3, deletedAt: null });
+      expect(prisma.book.findMany.mock.calls[1][0].where).toEqual({ id: { in: [11, 12] } });
+      expect(res.body.items.map((b) => b.id)).toEqual([11, 12]);
+    });
   });
 });

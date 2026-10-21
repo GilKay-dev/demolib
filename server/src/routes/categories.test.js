@@ -24,13 +24,22 @@ beforeEach(() => {
 });
 
 describe("access control", () => {
-  it("returns 401 without a token", async () => {
-    expect((await request(app).get("/api/categories")).status).toBe(401);
+  it("lets anyone, without logging in, list categories (public filter for 2.2.3)", async () => {
+    prisma.category.findMany.mockResolvedValue([]);
+    expect((await request(app).get("/api/categories")).status).toBe(200);
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
   });
 
-  it.each(["READER", "ADMIN"])("returns 403 for a %s", async (role) => {
+  it.each([["post", "/api/categories"], ["put", "/api/categories/1"], ["delete", "/api/categories/1"]])(
+    "returns 401 for an anonymous %s",
+    async (method, path) => {
+      expect((await request(app)[method](path).send({ name: "x" })).status).toBe(401);
+    },
+  );
+
+  it.each(["READER", "ADMIN"])("returns 403 for a %s on write endpoints", async (role) => {
     prisma.user.findUnique.mockResolvedValue({ id: 1, role, status: "ACTIVE" });
-    for (const [method, path] of [["get", "/api/categories"], ["post", "/api/categories"], ["put", "/api/categories/1"], ["delete", "/api/categories/1"]]) {
+    for (const [method, path] of [["post", "/api/categories"], ["put", "/api/categories/1"], ["delete", "/api/categories/1"]]) {
       expect((await request(app)[method](path).set(auth()).send({ name: "x" })).status).toBe(403);
     }
     expect(prisma.category.create).not.toHaveBeenCalled();

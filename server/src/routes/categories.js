@@ -6,9 +6,6 @@ import { categorySchema } from "../validators/category.js";
 
 export const categoriesRouter = Router();
 
-// 2.2.1 chỉ dành cho Nhân viên thư viện
-categoriesRouter.use(authenticate, requireRole("LIBRARIAN"));
-
 const NAME_TAKEN = { message: "Thể loại đã tồn tại", errors: { name: "Thể loại đã tồn tại" } };
 const NOT_FOUND = { message: "Thể loại không tồn tại" };
 
@@ -31,6 +28,7 @@ const parseId = (req, res, next) => {
   next();
 };
 
+// Danh sách thể loại công khai (bộ lọc ở 2.2.3 không cần đăng nhập)
 categoriesRouter.get("/", async (req, res) => {
   const categories = await prisma.category.findMany({
     where: { deletedAt: null },
@@ -39,6 +37,9 @@ categoriesRouter.get("/", async (req, res) => {
   // Sắp xếp theo locale tiếng Việt (giống client), không phụ thuộc collation của DB
   res.json(categories.map(toCategory).sort((a, b) => a.name.localeCompare(b.name, "vi")));
 });
+
+// Từ đây trở xuống (2.2.1: thêm/sửa/xóa) chỉ dành cho Nhân viên thư viện
+categoriesRouter.use(authenticate, requireRole("LIBRARIAN"));
 
 categoriesRouter.post("/", validate(categorySchema), async (req, res) => {
   const { name } = req.body;
