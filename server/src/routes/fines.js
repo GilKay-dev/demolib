@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
+import { validate } from "../middleware/validate.js";
+import { rejectFineSchema } from "../validators/fine.js";
 
 export const finesRouter = Router();
 
@@ -68,3 +70,61 @@ finesRouter.post("/:id/mark-paid", ...readerOnly, async (req, res) => {
   const exists = await prisma.fine.findFirst({ where: { id, borrow: { readerId: req.user.id } }, select: { id: true } });
   res.status(exists ? 409 : 404).json(exists ? NOT_PAYABLE : NOT_FOUND);
 });
+
+const librarianOnly = [authenticate, requireRole("LIBRARIAN")];
+const NOT_PENDING = { message: "Phiếu phạt đã được xử lý hoặc chưa chờ xác nhận, vui lòng tải lại danh sách" };
+
+// 2.5.3 Phiếu phạt chờ xác nhận thanh toán (độc giả báo trước nhận trước), kèm thông tin độc giả và sách
+finesRouter.get("/", ...librarianOnly, async (_req, res) => {
+  const rows = await prisma.fine.findMany({
+    where: { status: "PENDING" },
+    orderBy: [{ markedPaidAt: "asc" }, { id: "asc" }],
+    select: {
+      id: true,
+      type: true,
+      levelName: true,
+      amount: true,
+      note: true,
+      status: true,
+      finedDate: true,
+      markedPaidAt: true,
+      borrow: { select: { reader: { select: { id: true, name: true, email: true } }, book: { select: { id: true, title: true } } } },
+    },
+  });
+  const items = rows.map((f) => ({
+    id: f.id,
+    type: f.type,
+    levelName: f.levelName,
+    amount: Number(f.amount),
+    note: f.note,
+    status: f.status,
+    finedDate: f.finedDate.toISOString().slice(0, 10),
+    markedPaidAt: f.markedPaidAt,
+    reader: f.borrow.reader,
+    book: f.borrow.book,
+  }));
+  res.json({ items });
+});
+
+// Điều kiện PENDING nằm trong câu UPDATE để hai nhân viên xử lý đồng thời chỉ một người thành công
+const processFine = async (req, res, data, message, status) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(404).json(NOT_FOUND);
+  const { count } = await prisma.fine.updateMany({
+    where: { id, status: "PENDING" },
+    data: { ...data, status, processedById: req.user.id },
+  });
+  if (count === 1) return res.json({ message, fine: { id, status } });
+  const exists = await prisma.fine.findFirst({ where: { id }, select: { id: true } });
+  res.status(exists ? 409 : 404).json(exists ? NOT_PENDING : NOT_FOUND);
+};
+
+// 2.5.3 Nhân viên xác nhận đã nhận tiền → Đã thanh toán
+finesRouter.post("/:id/confirm", ...librarianOnly, (req, res) =>
+  processFine(req, res, { paidAt: new Date(), rejectReason: null }, "Đã xác nhận thanh toán", "PAID"),
+);
+
+// 2.5.3 Nhân viên từ chối (vd. sai số tiền) kèm lý do; độc giả thấy lý do và có thể gửi lại
+finesRouter.post("/:id/reject", ...librarianOnly, validate(rejectFineSchema), (req, res) =>
+  processFine(req, res, { rejectReason: req.body.reason }, "Đã từ chối thanh toán", "REJECTED"),
+);

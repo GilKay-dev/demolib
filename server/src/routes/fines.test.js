@@ -107,3 +107,59 @@ describe("POST /api/fines/:id/mark-paid", () => {
     expect(prisma.fine.updateMany).not.toHaveBeenCalled();
   });
 });
+
+describe("staff: 2.5.3", () => {
+  const librarian = () => authFor(fakeUser({ id: 3, role: "LIBRARIAN" }));
+  beforeEach(() => prisma.user.findUnique.mockResolvedValue(fakeUser({ id: 3, role: "LIBRARIAN" })));
+
+  it.each([
+    ["get", "/api/fines"],
+    ["post", "/api/fines/1/confirm"],
+    ["post", "/api/fines/1/reject"],
+  ])("%s %s returns 403 for a reader", async (method, url) => {
+    prisma.user.findUnique.mockResolvedValue(fakeUser({ id: 7, role: "READER" }));
+    expect((await request(app)[method](url).set(reader()).send({ reason: "x" })).status).toBe(403);
+    expect(prisma.fine.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("lists pending fines with reader and book", async () => {
+    prisma.fine.findMany.mockResolvedValue([
+      { ...row({ status: "PENDING", amount: 5000 }), markedPaidAt: new Date("2026-10-21T00:00:00Z"), borrow: { reader: { id: 7, name: "An", email: "a@x.com" }, book: { id: 4, title: "Clean Code" } } },
+    ]);
+    const res = await request(app).get("/api/fines").set(librarian());
+    expect(res.status).toBe(200);
+    expect(prisma.fine.findMany.mock.calls[0][0].where).toEqual({ status: "PENDING" });
+    expect(res.body.items[0]).toMatchObject({ id: 1, amount: 5000, reader: { name: "An" }, book: { title: "Clean Code" } });
+  });
+
+  it("confirms a pending fine as paid", async () => {
+    prisma.fine.updateMany.mockResolvedValue({ count: 1 });
+    const res = await request(app).post("/api/fines/1/confirm").set(librarian());
+    expect(res.status).toBe(200);
+    const arg = prisma.fine.updateMany.mock.calls[0][0];
+    expect(arg.where).toEqual({ id: 1, status: "PENDING" });
+    expect(arg.data).toMatchObject({ status: "PAID", processedById: 3 });
+    expect(arg.data.paidAt).toBeInstanceOf(Date);
+  });
+
+  it("rejects a pending fine with a reason", async () => {
+    prisma.fine.updateMany.mockResolvedValue({ count: 1 });
+    const res = await request(app).post("/api/fines/1/reject").set(librarian()).send({ reason: "Sai số tiền" });
+    expect(res.status).toBe(200);
+    expect(prisma.fine.updateMany.mock.calls[0][0].data).toMatchObject({ status: "REJECTED", rejectReason: "Sai số tiền", processedById: 3 });
+  });
+
+  it.each([{}, { reason: "  " }, { reason: "a".repeat(256) }])("rejects an invalid reason %j with 400", async (body) => {
+    const res = await request(app).post("/api/fines/1/reject").set(librarian()).send(body);
+    expect(res.status).toBe(400);
+    expect(prisma.fine.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 when the fine was already processed and 404 when missing", async () => {
+    prisma.fine.updateMany.mockResolvedValue({ count: 0 });
+    prisma.fine.findFirst.mockResolvedValueOnce({ id: 1 });
+    expect((await request(app).post("/api/fines/1/confirm").set(librarian())).status).toBe(409);
+    prisma.fine.findFirst.mockResolvedValueOnce(null);
+    expect((await request(app).post("/api/fines/1/confirm").set(librarian())).status).toBe(404);
+  });
+});
