@@ -10,6 +10,7 @@ import Categories from './pages/Categories'
 import FineLevels from './pages/FineLevels'
 import Login from './pages/Login'
 import MyBorrows from './pages/MyBorrows'
+import MyFines from './pages/MyFines'
 import Profile from './pages/Profile'
 import Register from './pages/Register'
 import ReturnRequests from './pages/ReturnRequests'
@@ -29,6 +30,7 @@ function Home() {
             <>
               <Link to="/profile" className={linkClass}>Hồ sơ cá nhân</Link>
               <Link to="/my-borrows" className={linkClass}>Sách đang mượn</Link>
+              <Link to="/fines" className={linkClass}>Khoản phạt</Link>
             </>
           )}
           {user.role === 'LIBRARIAN' && (
@@ -113,6 +115,14 @@ function App() {
         element={
           <RequireAuth roles={['READER']}>
             <MyBorrows />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/fines"
+        element={
+          <RequireAuth roles={['READER']}>
+            <MyFines />
           </RequireAuth>
         }
       />
