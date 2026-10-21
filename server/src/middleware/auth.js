@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma.js";
-import { assertJwtSecret } from "../lib/token.js";
+import { assertJwtSecret, passwordFingerprint } from "../lib/token.js";
 
 const UNAUTHORIZED = { message: "Vui lòng đăng nhập" };
 
@@ -17,9 +17,14 @@ export async function authenticate(req, res, next) {
     throw err;
   }
 
-  // Không nạp passwordHash vào req.user để tránh vô tình lộ ra qua res.json/log
-  const user = await prisma.user.findUnique({ where: { id: payload.sub }, omit: { passwordHash: true } });
-  if (!user || user.status !== "ACTIVE") return res.status(401).json(UNAUTHORIZED);
+  const found = await prisma.user.findUnique({ where: { id: payload.sub } });
+  if (!found || found.status !== "ACTIVE") return res.status(401).json(UNAUTHORIZED);
+
+  // Token cấp trước khi đổi mật khẩu (hoặc không có dấu vân tay) không còn hợp lệ
+  const { passwordHash, ...user } = found;
+  if (payload.pv !== passwordFingerprint(passwordHash)) return res.status(401).json(UNAUTHORIZED);
+
+  // Không giữ passwordHash trong req.user để tránh vô tình lộ ra qua res.json/log
   req.user = user;
   next();
 }

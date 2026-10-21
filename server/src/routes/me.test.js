@@ -14,6 +14,9 @@ vi.mock("../lib/prisma.js", () => ({
 process.env.JWT_SECRET = "test-secret";
 const { prisma } = await import("../lib/prisma.js");
 const { app } = await import("../app.js");
+const { passwordFingerprint } = await import("../lib/token.js");
+
+const HASH = bcrypt.hashSync("password1", 4); // cố định: dấu vân tay của token phụ thuộc vào hash
 
 const dbUser = (patch = {}) => ({
   id: 5,
@@ -24,10 +27,11 @@ const dbUser = (patch = {}) => ({
   role: "READER",
   status: "ACTIVE",
   createdAt: new Date("2026-01-02T00:00:00Z"),
-  passwordHash: bcrypt.hashSync("password1", 4),
+  passwordHash: HASH,
   ...patch,
 });
-const tokenFor = (id = 5, secret = "test-secret", opts = {}) => jwt.sign({ sub: id, role: "READER" }, secret, opts);
+const tokenFor = (id = 5, secret = "test-secret", opts = {}, claims = { pv: passwordFingerprint(HASH) }) =>
+  jwt.sign({ sub: id, role: "READER", ...claims }, secret, opts);
 const auth = (t = tokenFor()) => ({ Authorization: `Bearer ${t}` });
 
 beforeEach(() => {
@@ -65,10 +69,20 @@ describe("authentication", () => {
   });
 });
 
-describe("req.user", () => {
-  it("is loaded without the password hash", async () => {
-    await request(app).get("/api/me").set(auth());
-    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 5 }, omit: { passwordHash: true } });
+describe("token invalidation after a password change", () => {
+  it("rejects a token issued for a previous password", async () => {
+    prisma.user.findUnique.mockResolvedValue(dbUser({ passwordHash: bcrypt.hashSync("another-pass", 4) }));
+    expect((await request(app).get("/api/me").set(auth())).status).toBe(401);
+  });
+
+  it("rejects a token without a password fingerprint", async () => {
+    const res = await request(app).get("/api/me").set(auth(tokenFor(5, "test-secret", {}, {})));
+    expect(res.status).toBe(401);
+  });
+
+  it("does not leak the password hash through the profile response", async () => {
+    const res = await request(app).get("/api/me").set(auth());
+    expect(JSON.stringify(res.body)).not.toContain(HASH);
   });
 });
 
@@ -153,6 +167,20 @@ describe("PUT /api/me/password", () => {
     expect(where).toEqual({ id: 5 });
     expect(data.passwordHash).not.toBe("newpassword2");
     expect(bcrypt.compareSync("newpassword2", data.passwordHash)).toBe(true);
+  });
+
+  it("returns a fresh token tied to the new password so the current session survives", async () => {
+    const res = await request(app).put("/api/me/password").set(auth()).send(valid);
+    const newHash = prisma.user.update.mock.calls[0][0].data.passwordHash;
+    const claims = jwt.verify(res.body.token, "test-secret");
+    expect(claims).toMatchObject({ sub: 5, role: "READER" });
+    expect(claims.pv).toBe(passwordFingerprint(newHash));
+    expect(claims.pv).not.toBe(passwordFingerprint(HASH)); // token cũ không còn khớp
+  });
+
+  it("does not return a token when the change fails", async () => {
+    const res = await request(app).put("/api/me/password").set(auth()).send({ ...valid, currentPassword: "wrongpass1" });
+    expect(res.body.token).toBeUndefined();
   });
 
   it("returns 400 when the current password is wrong", async () => {

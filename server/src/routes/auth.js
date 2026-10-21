@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { comparePassword, hashPassword } from "../lib/password.js";
 import { prisma } from "../lib/prisma.js";
+import { loginLimiter } from "../middleware/rateLimit.js";
 import { validate } from "../middleware/validate.js";
 import { signToken } from "../lib/token.js";
 import { loginSchema, registerSchema } from "../validators/auth.js";
@@ -14,7 +15,7 @@ const INACTIVE = {
 };
 
 // 2.1.2 Đăng nhập: trả JWT 24h
-authRouter.post("/login", validate(loginSchema), async (req, res) => {
+authRouter.post("/login", loginLimiter, validate(loginSchema), async (req, res) => {
   const { email, password } = req.body;
   const user = await prisma.user.findUnique({ where: { email } });
   const ok = await comparePassword(password, user?.passwordHash);

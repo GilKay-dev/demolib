@@ -8,6 +8,9 @@ import { meRouter } from "./routes/me.js";
 
 export const app = express();
 
+// Sau reverse proxy (Vercel...) cần báo số lớp proxy để rate limit lấy đúng IP client
+if (process.env.TRUST_PROXY) app.set("trust proxy", Number(process.env.TRUST_PROXY));
+
 app.use(helmet());
 app.use(cors({ origin: process.env.CLIENT_URL }));
 app.use(express.json());

@@ -157,7 +157,7 @@ export default function Categories() {
 
   const load = useCallback(async () => {
     try {
-      const { data } = await api.get('/categories')
+      const { data } = await api.get('/categories/manage')
       setCategories(data)
       setLoadError('')
     } catch {

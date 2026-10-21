@@ -93,6 +93,7 @@ function ProfileForm({ profile, onSaved, onCancel }) {
 }
 
 function PasswordForm({ onCancel }) {
+  const { user, login } = useAuth()
   const [formError, setFormError] = useState('')
   const [done, setDone] = useState('')
   const {
@@ -108,6 +109,8 @@ function PasswordForm({ onCancel }) {
     setFormError('')
     try {
       const { data } = await api.put('/me/password', values)
+      // Token cũ hết hiệu lực sau khi đổi mật khẩu: dùng token mới server cấp để không bị đăng xuất
+      if (data.token) login({ token: data.token, user })
       reset()
       setDone(data.message)
     } catch (err) {

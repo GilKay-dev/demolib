@@ -1,4 +1,4 @@
-import jwt from "jsonwebtoken";
+import { authFor, fakeUser } from "../test/auth.js";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,12 +13,12 @@ process.env.JWT_SECRET = "test-secret";
 const { prisma } = await import("../lib/prisma.js");
 const { app } = await import("../app.js");
 
-const auth = () => ({ Authorization: `Bearer ${jwt.sign({ sub: 1 }, "test-secret")}` });
+const auth = () => authFor();
 const withCount = (c, books = 0) => ({ ...c, _count: { books } });
 
 beforeEach(() => {
   vi.clearAllMocks();
-  prisma.user.findUnique.mockResolvedValue({ id: 1, role: "LIBRARIAN", status: "ACTIVE" });
+  prisma.user.findUnique.mockResolvedValue(fakeUser());
   // mockReset (không chỉ clear) để xóa cả hàng đợi mockResolvedValueOnce còn sót
   prisma.category.findFirst.mockReset().mockResolvedValue(null);
 });
@@ -38,7 +38,7 @@ describe("access control", () => {
   );
 
   it.each(["READER", "ADMIN"])("returns 403 for a %s on write endpoints", async (role) => {
-    prisma.user.findUnique.mockResolvedValue({ id: 1, role, status: "ACTIVE" });
+    prisma.user.findUnique.mockResolvedValue(fakeUser({ role }));
     for (const [method, path] of [["post", "/api/categories"], ["put", "/api/categories/1"], ["delete", "/api/categories/1"]]) {
       expect((await request(app)[method](path).set(auth()).send({ name: "x" })).status).toBe(403);
     }
@@ -46,10 +46,20 @@ describe("access control", () => {
   });
 });
 
-describe("GET /api/categories", () => {
+describe("GET /api/categories (public)", () => {
+  it("returns only id and name, sorted by Vietnamese locale, without book counts", async () => {
+    prisma.category.findMany.mockResolvedValue([{ id: 2, name: "B" }, { id: 1, name: "A" }]);
+    const res = await request(app).get("/api/categories");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([{ id: 1, name: "A" }, { id: 2, name: "B" }]);
+    expect(prisma.category.findMany).toHaveBeenCalledWith({ where: { deletedAt: null }, select: { id: true, name: true } });
+  });
+});
+
+describe("GET /api/categories/manage (librarian)", () => {
   it("lists active categories with their active book counts", async () => {
     prisma.category.findMany.mockResolvedValue([withCount({ id: 2, name: "B" }), withCount({ id: 1, name: "A", createdAt: 0 }, 2)]);
-    const res = await request(app).get("/api/categories").set(auth());
+    const res = await request(app).get("/api/categories/manage").set(auth());
     expect(res.status).toBe(200);
     expect(res.body).toEqual([
       { id: 1, name: "A", bookCount: 2 },
@@ -58,6 +68,13 @@ describe("GET /api/categories", () => {
     const args = prisma.category.findMany.mock.calls[0][0];
     expect(args.where).toEqual({ deletedAt: null });
     expect(args.include._count.select.books.where).toEqual({ deletedAt: null });
+  });
+
+  it("requires a librarian", async () => {
+    expect((await request(app).get("/api/categories/manage")).status).toBe(401);
+    prisma.user.findUnique.mockResolvedValue(fakeUser({ role: "READER" }));
+    expect((await request(app).get("/api/categories/manage").set(auth())).status).toBe(403);
+    expect(prisma.category.findMany).not.toHaveBeenCalled();
   });
 });
 

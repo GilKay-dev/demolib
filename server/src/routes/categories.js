@@ -28,20 +28,24 @@ const parseId = (req, res, next) => {
   next();
 };
 
-// Danh sách thể loại công khai (bộ lọc ở 2.2.3 không cần đăng nhập)
+// Xác thực khai báo trên từng route (không dùng router.use) để route mới thêm không vô tình thành công khai
+const staffOnly = [authenticate, requireRole("LIBRARIAN")];
+
+const byName = (a, b) => a.name.localeCompare(b.name, "vi"); // locale tiếng Việt, giống client
+
+// Công khai: chỉ id và tên, đủ cho bộ lọc ở 2.2.3 và form thêm sách
 categoriesRouter.get("/", async (req, res) => {
-  const categories = await prisma.category.findMany({
-    where: { deletedAt: null },
-    include: { _count: activeBooks },
-  });
-  // Sắp xếp theo locale tiếng Việt (giống client), không phụ thuộc collation của DB
-  res.json(categories.map(toCategory).sort((a, b) => a.name.localeCompare(b.name, "vi")));
+  const categories = await prisma.category.findMany({ where: { deletedAt: null }, select: { id: true, name: true } });
+  res.json(categories.sort(byName));
 });
 
-// Từ đây trở xuống (2.2.1: thêm/sửa/xóa) chỉ dành cho Nhân viên thư viện
-categoriesRouter.use(authenticate, requireRole("LIBRARIAN"));
+// 2.2.1 (nhân viên): kèm số sách chưa xóa của từng thể loại để quản lý
+categoriesRouter.get("/manage", ...staffOnly, async (req, res) => {
+  const categories = await prisma.category.findMany({ where: { deletedAt: null }, include: { _count: activeBooks } });
+  res.json(categories.map(toCategory).sort(byName));
+});
 
-categoriesRouter.post("/", validate(categorySchema), async (req, res) => {
+categoriesRouter.post("/", ...staffOnly, validate(categorySchema), async (req, res) => {
   const { name } = req.body;
   if (await nameTaken(name)) return res.status(409).json(NAME_TAKEN);
   try {
@@ -54,7 +58,7 @@ categoriesRouter.post("/", validate(categorySchema), async (req, res) => {
   }
 });
 
-categoriesRouter.put("/:id", parseId, validate(categorySchema), async (req, res) => {
+categoriesRouter.put("/:id", ...staffOnly, parseId, validate(categorySchema), async (req, res) => {
   const { name } = req.body;
   const existing = await prisma.category.findFirst({ where: { id: req.categoryId, deletedAt: null }, select: { id: true } });
   if (!existing) return res.status(404).json(NOT_FOUND);
@@ -73,7 +77,7 @@ categoriesRouter.put("/:id", parseId, validate(categorySchema), async (req, res)
 });
 
 // Xóa mềm; không xóa được khi còn sách (chưa xóa) thuộc thể loại
-categoriesRouter.delete("/:id", parseId, async (req, res) => {
+categoriesRouter.delete("/:id", ...staffOnly, parseId, async (req, res) => {
   // Kiểm tra "không còn sách" và xóa trong một câu lệnh có điều kiện để không hở giữa hai bước
   const { count } = await prisma.category.updateMany({
     where: { id: req.categoryId, deletedAt: null, books: { none: { deletedAt: null } } },

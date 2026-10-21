@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '../context/AuthContext'
-import { api } from '../lib/api'
+import { api, setToken } from '../lib/api'
 import Profile from './Profile'
 
 vi.mock('../lib/api', () => ({
@@ -143,6 +143,24 @@ describe('Profile', () => {
       await openPassword(user)
       await fill(user)
       expect(await screen.findByText('Mật khẩu hiện tại không đúng')).toBeInTheDocument()
+    })
+
+    it('switches to the new token issued by the server so the session survives the change', async () => {
+      api.put.mockResolvedValue({ data: { message: 'Đổi mật khẩu thành công', token: 'new-jwt' } })
+      const user = userEvent.setup()
+      await openPassword(user)
+      await fill(user)
+      expect(await screen.findByText('Đổi mật khẩu thành công')).toBeInTheDocument()
+      expect(setToken).toHaveBeenCalledWith('new-jwt')
+      expect(JSON.parse(localStorage.getItem('auth')).token).toBe('new-jwt')
+    })
+
+    it('shows the lockout message when the server rate-limits the change', async () => {
+      api.put.mockRejectedValue({ response: { status: 429, data: { message: 'Quá nhiều lần đổi mật khẩu thất bại, vui lòng thử lại sau 15 phút' } } })
+      const user = userEvent.setup()
+      await openPassword(user)
+      await fill(user)
+      expect(await screen.findByText(/Quá nhiều lần đổi mật khẩu thất bại/)).toBeInTheDocument()
     })
 
     it('confirms success', async () => {
