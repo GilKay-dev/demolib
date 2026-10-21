@@ -5,6 +5,7 @@ import BookCreate from './pages/BookCreate'
 import BookDetail from './pages/BookDetail'
 import BookEdit from './pages/BookEdit'
 import BookList from './pages/BookList'
+import BorrowRequests from './pages/BorrowRequests'
 import Categories from './pages/Categories'
 import Login from './pages/Login'
 import Profile from './pages/Profile'
@@ -26,6 +27,7 @@ function Home() {
             <>
               <Link to="/categories" className={linkClass}>Thể loại sách</Link>
               <Link to="/books/new" className={linkClass}>Thêm sách mới</Link>
+              <Link to="/borrow-requests" className={linkClass}>Đơn mượn chờ xác nhận</Link>
             </>
           )}
           <button type="button" onClick={logout} className={`${linkClass} cursor-pointer`}>Đăng xuất</button>
@@ -69,6 +71,14 @@ function App() {
         element={
           <RequireAuth roles={['LIBRARIAN']}>
             <Categories />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/borrow-requests"
+        element={
+          <RequireAuth roles={['LIBRARIAN']}>
+            <BorrowRequests />
           </RequireAuth>
         }
       />
