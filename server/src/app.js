@@ -3,6 +3,7 @@ import express from "express";
 import helmet from "helmet";
 import { authRouter } from "./routes/auth.js";
 import { booksRouter } from "./routes/books.js";
+import { borrowsRouter } from "./routes/borrows.js";
 import { categoriesRouter } from "./routes/categories.js";
 import { meRouter } from "./routes/me.js";
 
@@ -23,6 +24,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/me", meRouter);
 app.use("/api/categories", categoriesRouter);
 app.use("/api/books", booksRouter);
+app.use("/api/borrows", borrowsRouter);
 
 app.use((err, req, res, _next) => {
   // Lỗi 4xx của body-parser (JSON sai định dạng, body quá lớn) là lỗi của client
