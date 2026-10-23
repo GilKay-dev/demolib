@@ -7,6 +7,7 @@ import BookEdit from './pages/BookEdit'
 import BookList from './pages/BookList'
 import BorrowRequests from './pages/BorrowRequests'
 import Categories from './pages/Categories'
+import Dashboard from './pages/Dashboard'
 import FineConfirmations from './pages/FineConfirmations'
 import FineLevels from './pages/FineLevels'
 import Login from './pages/Login'
@@ -34,6 +35,9 @@ function Home() {
               <Link to="/my-borrows" className={linkClass}>Sách đang mượn</Link>
               <Link to="/fines" className={linkClass}>Khoản phạt</Link>
             </>
+          )}
+          {(user.role === 'LIBRARIAN' || user.role === 'ADMIN') && (
+            <Link to="/dashboard" className={linkClass}>Báo cáo tổng quan</Link>
           )}
           {user.role === 'LIBRARIAN' && (
             <>
@@ -115,6 +119,14 @@ function App() {
         element={
           <RequireAuth roles={['LIBRARIAN']}>
             <FineConfirmations />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/dashboard"
+        element={
+          <RequireAuth roles={['LIBRARIAN', 'ADMIN']}>
+            <Dashboard />
           </RequireAuth>
         }
       />
