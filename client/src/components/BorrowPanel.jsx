@@ -45,20 +45,19 @@ export default function BorrowPanel({ bookId }) {
     }
   }
 
-  if (!eligibility) return null
-
+  // Hiện nút ngay (mờ) trong lúc chờ server kiểm tra điều kiện, tránh nút xuất hiện trễ
   return (
     <div className="mb-6">
       {done && <p role="status" className="mb-2 text-green-700">{done}</p>}
       <button
         type="button"
         onClick={() => setOpen(true)}
-        disabled={!eligibility.eligible}
+        disabled={!eligibility?.eligible}
         className="rounded bg-blue-700 px-4 py-2 text-white disabled:opacity-50"
       >
         Mượn sách
       </button>
-      {!eligibility.eligible && !done && (
+      {eligibility && !eligibility.eligible && !done && (
         <p className="mt-2 text-slate-700">
           {eligibility.message}
           {eligibility.link && (
