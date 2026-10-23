@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,23 +14,31 @@ const renderPanel = () =>
     </MemoryRouter>,
   )
 
+// Nút hiện ngay nhưng mờ cho đến khi kiểm tra điều kiện xong
+const enabledBorrowButton = async () => {
+  const button = screen.getByRole('button', { name: 'Mượn sách' })
+  await waitFor(() => expect(button).toBeEnabled())
+  return button
+}
+
 describe('BorrowPanel', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     api.get.mockResolvedValue({ data: { eligible: true } })
   })
 
-  it('checks eligibility for the book and enables the button', async () => {
+  it('shows the button disabled right away, then enables it once eligibility is checked', async () => {
     renderPanel()
-    expect(await screen.findByRole('button', { name: 'Mượn sách' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Mượn sách' })).toBeDisabled()
+    await enabledBorrowButton()
     expect(api.get).toHaveBeenCalledWith('/borrows/eligibility', { params: { bookId: 7 } })
   })
 
   it('disables the button and shows the reason when not eligible', async () => {
     api.get.mockResolvedValue({ data: { eligible: false, message: 'Sách đã hết, không thể mượn' } })
     renderPanel()
-    expect(await screen.findByRole('button', { name: 'Mượn sách' })).toBeDisabled()
-    expect(screen.getByText('Sách đã hết, không thể mượn')).toBeInTheDocument()
+    expect(await screen.findByText('Sách đã hết, không thể mượn')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mượn sách' })).toBeDisabled()
   })
 
   it('links to the fines page for an unpaid fine', async () => {
@@ -42,7 +50,7 @@ describe('BorrowPanel', () => {
   it('submits the default 14 days', async () => {
     api.post.mockResolvedValue({ data: { message: 'Đã gửi yêu cầu mượn, chờ nhân viên xác nhận' } })
     renderPanel()
-    await userEvent.click(await screen.findByRole('button', { name: 'Mượn sách' }))
+    await userEvent.click(await enabledBorrowButton())
     expect(screen.getByLabelText('Thời hạn mượn (ngày)')).toHaveValue(14)
     await userEvent.click(screen.getByRole('button', { name: 'Gửi yêu cầu' }))
     expect(api.post).toHaveBeenCalledWith('/borrows', { bookId: 7, days: 14 })
@@ -52,7 +60,7 @@ describe('BorrowPanel', () => {
 
   it.each(['0', '31', '2.5'])('rejects %s days without calling the API', async (value) => {
     renderPanel()
-    await userEvent.click(await screen.findByRole('button', { name: 'Mượn sách' }))
+    await userEvent.click(await enabledBorrowButton())
     const input = screen.getByLabelText('Thời hạn mượn (ngày)')
     await userEvent.clear(input)
     await userEvent.type(input, value)
@@ -64,7 +72,7 @@ describe('BorrowPanel', () => {
   it('shows the server error and keeps the dialog open', async () => {
     api.post.mockRejectedValue({ response: { data: { message: 'Đã đạt tối đa 5 sách mượn' } } })
     renderPanel()
-    await userEvent.click(await screen.findByRole('button', { name: 'Mượn sách' }))
+    await userEvent.click(await enabledBorrowButton())
     await userEvent.click(screen.getByRole('button', { name: 'Gửi yêu cầu' }))
     expect(await screen.findByText('Đã đạt tối đa 5 sách mượn')).toBeInTheDocument()
     expect(screen.getByRole('dialog')).toBeInTheDocument()
@@ -72,7 +80,7 @@ describe('BorrowPanel', () => {
 
   it('closes the dialog on cancel', async () => {
     renderPanel()
-    await userEvent.click(await screen.findByRole('button', { name: 'Mượn sách' }))
+    await userEvent.click(await enabledBorrowButton())
     await userEvent.click(screen.getByRole('button', { name: 'Hủy' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })

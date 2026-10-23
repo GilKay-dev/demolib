@@ -1,1 +1,63 @@
 @import "tailwindcss";
+
+/* Màu dịu hơn: nền xám nhạt thay vì trắng chói, thẻ/ô nhập hơi ngả xám */
+:root {
+  color-scheme: light dark;
+  --page-bg: #e9edf2;
+  --page-text: #1e293b;
+  --surface: #f6f8fa;
+}
+
+body {
+  background-color: var(--page-bg);
+  color: var(--page-text);
+}
+
+.bg-white,
+input,
+select,
+textarea {
+  background-color: var(--surface);
+}
+
+/* Chế độ tối: theo cài đặt hệ điều hành; đổi các màu chữ/nền cố định của Tailwind */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page-bg: #0f172a;
+    --page-text: #e2e8f0;
+    --surface: #1e293b;
+  }
+
+  .bg-slate-50 {
+    background-color: var(--page-bg);
+  }
+
+  .text-slate-900,
+  .text-slate-700 {
+    color: #e2e8f0;
+  }
+
+  .text-slate-600,
+  .text-slate-500 {
+    color: #94a3b8;
+  }
+
+  .text-blue-700 {
+    color: #7cb4ff;
+  }
+
+  .border-slate-300,
+  .border-slate-200 {
+    border-color: #475569;
+  }
+
+  .bg-red-50 {
+    background-color: #3b1d22;
+  }
+
+  input,
+  select,
+  textarea {
+    color: var(--page-text);
+  }
+}
