@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import { inputClass } from '../lib/form'
 
@@ -12,6 +13,7 @@ const roleLabel = (role) => ROLES.find(([value]) => value === role)?.[1] ?? role
 const formatDate = (iso) => new Date(iso).toLocaleDateString('vi-VN')
 
 export default function Users() {
+  const currentId = useAuth()?.user?.id
   const [form, setForm] = useState({ q: '', role: '' })
   const [filters, setFilters] = useState({ q: '', role: '' })
   const [page, setPage] = useState(1)
@@ -52,6 +54,27 @@ export default function Users() {
       const { data } = await api.patch(`/users/${user.id}/status`, { status })
       setResult((r) => ({ ...r, items: r.items.map((u) => (u.id === data.id ? data : u)) }))
       setNotice(status === 'ACTIVE' ? `Đã kích hoạt tài khoản ${data.email}` : `Đã vô hiệu hóa tài khoản ${data.email}`)
+    } catch (err) {
+      if (err.response?.status === 404) {
+        setNotice('Người dùng không còn tồn tại, đã tải lại danh sách')
+        load()
+      } else {
+        setError(err.response?.data?.message ?? 'Không thể cập nhật, vui lòng thử lại')
+      }
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const changeRole = async (user, role) => {
+    if (busyId || role === user.role) return
+    setBusyId(user.id)
+    setNotice('')
+    try {
+      const { data } = await api.patch(`/users/${user.id}/role`, { role })
+      setResult((r) => ({ ...r, items: r.items.map((u) => (u.id === data.id ? data : u)) }))
+      setError('')
+      setNotice(`Đã đổi vai trò của ${data.email} thành ${roleLabel(data.role)}`)
     } catch (err) {
       if (err.response?.status === 404) {
         setNotice('Người dùng không còn tồn tại, đã tải lại danh sách')
@@ -107,7 +130,21 @@ export default function Users() {
                 <tr key={u.id} className="border-b border-slate-200">
                   <td className="py-2 pr-4">{u.email}</td>
                   <td className="py-2 pr-4">{u.name}</td>
-                  <td className="py-2 pr-4">{roleLabel(u.role)}</td>
+                  <td className="py-2 pr-4">
+                    {u.id === currentId ? (
+                      roleLabel(u.role)
+                    ) : (
+                      <select
+                        aria-label={`Vai trò của ${u.email}`}
+                        className={inputClass}
+                        value={u.role}
+                        disabled={busyId === u.id}
+                        onChange={(e) => changeRole(u, e.target.value)}
+                      >
+                        {ROLES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      </select>
+                    )}
+                  </td>
                   <td className="py-2 pr-4">{formatDate(u.createdAt)}</td>
                   <td className="py-2 pr-4">{STATUS_LABEL[u.status]}</td>
                   <td className="py-2">
