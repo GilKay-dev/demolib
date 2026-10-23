@@ -27,3 +27,6 @@ Thumbs.db
 
 # MCP config contains the Postman API key
 .mcp.json
+
+# Vercel
+.vercel
