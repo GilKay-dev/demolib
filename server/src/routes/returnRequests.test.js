@@ -20,10 +20,8 @@ const { prisma } = await import("../lib/prisma.js");
 const { app } = await import("../app.js");
 
 const staff = () => authFor(fakeUser({ id: 3, role: "LIBRARIAN" }));
-const day = (offset) => {
-  const n = new Date();
-  return new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate() + offset));
-};
+const { today } = await import("../lib/today.js");
+const day = (offset) => new Date(today().getTime() + offset * 86400000);
 const LEVELS = [
   { id: 1, name: "Hư nhẹ", amount: 20000 },
   { id: 2, name: "Trả muộn", amount: 5000 },

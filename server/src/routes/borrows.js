@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
+import { today } from "../lib/today.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import { createBorrowSchema, rejectBorrowSchema } from "../validators/borrow.js";
@@ -73,12 +74,6 @@ borrowsRouter.post("/", authenticate, requireRole("READER"), validate(createBorr
 const ALREADY_PROCESSED = { message: "Đơn đã được xử lý bởi người khác, vui lòng tải lại danh sách" };
 const NO_STOCK = { message: "Sách đã hết bản, không thể xác nhận; hãy từ chối với lý do hết sách" };
 const BORROW_MISSING = { message: "Không tìm thấy đơn mượn" };
-
-// Ngày hôm nay dạng date (00:00 UTC) để lưu vào cột date mà không lệch múi giờ
-const today = () => {
-  const n = new Date();
-  return new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()));
-};
 
 // 2.3.2 Danh sách đơn chờ xác nhận, cũ nhất trước
 borrowsRouter.get("/", authenticate, requireRole("LIBRARIAN"), async (req, res) => {

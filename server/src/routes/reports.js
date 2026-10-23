@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
+import { today } from "../lib/today.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
 import { reportQuerySchema } from "../validators/report.js";
 
@@ -8,12 +9,6 @@ export const reportsRouter = Router();
 const DAY = 86400000;
 const TOP_BOOKS = 5;
 const OVERDUE_LIMIT = 50;
-
-// Ngày hôm nay dạng date (00:00 UTC), cùng cách lưu với due_date nên so sánh không lệch múi giờ
-const today = () => {
-  const n = new Date();
-  return new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()));
-};
 
 // Xác thực khai báo trên từng route để route mới thêm không vô tình thành công khai
 const staff = [authenticate, requireRole("LIBRARIAN", "ADMIN")];

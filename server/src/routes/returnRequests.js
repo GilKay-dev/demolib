@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
+import { today } from "../lib/today.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
 import { confirmReturnSchema } from "../validators/returnRequest.js";
@@ -14,11 +15,6 @@ const LEVEL_MISSING = { message: "Mức phạt không tồn tại" };
 const DAY = 86400000;
 const parseId = (raw) => (typeof raw === "string" && /^\d+$/.test(raw) && Number(raw) <= 2147483647 ? Number(raw) : null);
 
-// Ngày hôm nay dạng date (00:00 UTC), cùng cách lưu với due_date nên so sánh không lệch múi giờ
-const today = () => {
-  const n = new Date();
-  return new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()));
-};
 const daysLate = (dueDate, now) => Math.max(0, Math.round((now.getTime() - new Date(dueDate).getTime()) / DAY));
 
 // 2.4.2 Yêu cầu trả chờ xác nhận (cũ nhất trước) kèm các mức phạt để form chọn
