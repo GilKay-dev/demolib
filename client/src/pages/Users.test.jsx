@@ -1,10 +1,12 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useAuth } from '../context/AuthContext'
 import { api } from '../lib/api'
 import Users from './Users'
 
 vi.mock('../lib/api', () => ({ api: { get: vi.fn(), patch: vi.fn() } }))
+vi.mock('../context/AuthContext', () => ({ useAuth: vi.fn() }))
 
 const user = (over = {}) => ({ id: 2, email: 'an@x.com', name: 'An', role: 'READER', status: 'ACTIVE', createdAt: '2026-10-01T00:00:00.000Z', ...over })
 const page = (items, over = {}) => ({ data: { items, page: 1, pageSize: 10, total: items.length, totalPages: 1, ...over } })
@@ -18,8 +20,34 @@ describe('Users', () => {
   it('lists users with role and status labels', async () => {
     render(<Users />)
     expect(await screen.findByText('an@x.com')).toBeInTheDocument()
-    expect(screen.getByRole('cell', { name: 'Librarian' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Vai trò của bo@x.com')).toHaveValue('LIBRARIAN')
     expect(screen.getByText('Chờ kích hoạt')).toBeInTheDocument()
+  })
+
+  it('assigns a new role', async () => {
+    api.patch.mockResolvedValue({ data: user({ role: 'LIBRARIAN' }) })
+    render(<Users />)
+    const u = userEvent.setup()
+    await u.selectOptions(await screen.findByLabelText('Vai trò của an@x.com'), 'LIBRARIAN')
+    expect(api.patch).toHaveBeenCalledWith('/users/2/role', { role: 'LIBRARIAN' })
+    expect(await screen.findByRole('status')).toHaveTextContent('Đã đổi vai trò của an@x.com thành Librarian')
+    expect(screen.getByLabelText('Vai trò của an@x.com')).toHaveValue('LIBRARIAN')
+  })
+
+  it('shows the server message when the role change is refused', async () => {
+    api.patch.mockRejectedValue({ response: { status: 409, data: { message: 'Bạn không thể đổi vai trò của chính mình' } } })
+    render(<Users />)
+    const u = userEvent.setup()
+    await u.selectOptions(await screen.findByLabelText('Vai trò của an@x.com'), 'ADMIN')
+    expect(await screen.findByRole('alert')).toHaveTextContent('đổi vai trò của chính mình')
+  })
+
+  it('does not offer a role picker for the signed-in admin', async () => {
+    useAuth.mockReturnValue({ user: { id: 2 } })
+    render(<Users />)
+    await screen.findByText('an@x.com')
+    expect(screen.queryByLabelText('Vai trò của an@x.com')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Vai trò của bo@x.com')).toBeInTheDocument()
   })
 
   it('searches by text and role, resetting to page 1', async () => {

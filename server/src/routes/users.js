@@ -2,7 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
-import { userStatusSchema } from "../validators/user.js";
+import { userRoleSchema, userStatusSchema } from "../validators/user.js";
 
 export const usersRouter = Router();
 
@@ -68,6 +68,21 @@ usersRouter.patch("/:id/status", ...adminOnly, parseId, validate(userStatusSchem
   }
   try {
     const user = await prisma.user.update({ where: { id: req.targetId }, data: { status }, select });
+    res.json(toUser(user));
+  } catch (err) {
+    if (err.code === "P2025") return res.status(404).json(NOT_FOUND);
+    throw err;
+  }
+});
+
+// 2.6.2 Gán vai trò; không tự đổi vai trò của mình để hệ thống luôn còn ít nhất một Admin
+usersRouter.patch("/:id/role", ...adminOnly, parseId, validate(userRoleSchema), async (req, res) => {
+  const { role } = req.body;
+  if (req.targetId === req.user.id) {
+    return res.status(409).json({ message: "Bạn không thể đổi vai trò của chính mình" });
+  }
+  try {
+    const user = await prisma.user.update({ where: { id: req.targetId }, data: { role }, select });
     res.json(toUser(user));
   } catch (err) {
     if (err.code === "P2025") return res.status(404).json(NOT_FOUND);

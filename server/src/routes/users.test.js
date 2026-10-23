@@ -32,7 +32,7 @@ beforeEach(() => {
 });
 
 describe("access control", () => {
-  const calls = [["get", "/api/users"], ["patch", "/api/users/2/status"]];
+  const calls = [["get", "/api/users"], ["patch", "/api/users/2/status"], ["patch", "/api/users/2/role"]];
 
   it.each(calls)("returns 401 for an anonymous %s", async (method, path) => {
     expect((await request(app)[method](path).send({})).status).toBe(401);
@@ -120,6 +120,39 @@ describe("PATCH /api/users/:id/status", () => {
 
   it("returns 404 for a malformed id", async () => {
     const res = await request(app).patch("/api/users/abc/status").set(auth()).send({ status: "DISABLED" });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("PATCH /api/users/:id/role", () => {
+  it.each(["LIBRARIAN", "ADMIN", "READER"])("assigns role %s to another account", async (role) => {
+    prisma.user.update.mockResolvedValue(row({ role }));
+    const res = await request(app).patch("/api/users/2/role").set(auth()).send({ role });
+    expect(res.status).toBe(200);
+    expect(res.body.role).toBe(role);
+    expect(prisma.user.update.mock.calls[0][0]).toMatchObject({ where: { id: 2 }, data: { role } });
+  });
+
+  it("refuses to change the caller's own role", async () => {
+    const res = await request(app).patch("/api/users/1/role").set(auth()).send({ role: "READER" });
+    expect(res.status).toBe(409);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it.each([{ role: "ROOT" }, { role: 1 }, {}, { role: "READER", status: "ACTIVE" }])("rejects invalid body %j", async (body) => {
+    const res = await request(app).patch("/api/users/2/role").set(auth()).send(body);
+    expect(res.status).toBe(400);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for a missing user", async () => {
+    prisma.user.update.mockRejectedValue({ code: "P2025" });
+    const res = await request(app).patch("/api/users/999/role").set(auth()).send({ role: "READER" });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 for a malformed id", async () => {
+    const res = await request(app).patch("/api/users/abc/role").set(auth()).send({ role: "READER" });
     expect(res.status).toBe(404);
   });
 });
