@@ -29,3 +29,17 @@ Log of past mistakes and fixes, grouped by category. Check before repeating simi
 
 - **`node -e` string-replace on a source file silently did nothing (second time).** The search string used the wrong quote style (`it("...")` vs the file's `it('...')`), so `.replace()` matched nothing and no error was raised; the test count not rising was the only sign.
   **Fix:** edit with the Edit tool (it errors on no match). After any scripted edit, check the diff or test count changed as expected.
+
+## Deploy (Vercel)
+
+- **`FUNCTION_INVOCATION_FAILED`, log `Cannot find module '/var/task/server/src/generated/prisma/client.ts'`.** The Prisma client is generated at build time and gitignored, and Vercel's file tracing didn't pick up the `.ts` import, so it was missing from the serverless function.
+  **Fix:** in `vercel.json` add `"functions": { "api/index.js": { "includeFiles": "server/src/generated/**" } }`, then redeploy.
+
+- **`vercel env add` in the `!` shell fails with `missing_value`.** That shell is non-interactive, so the value prompt can't appear.
+  **Fix:** pass `--environment production --value "..." --yes` (add `--force` to overwrite). Don't copy the `<...>` placeholders from instructions: a value pasted with the angle brackets was stored wrong and had to be overwritten.
+
+- **Changed env var has no effect.** Production env vars are read at deploy time.
+  **Fix:** redeploy (`npx vercel deploy --prod --yes`) after every `env add`.
+
+- **`vercel link` / `vercel logs` flags rejected.** Vercel CLI 65 needs `--yes` for non-interactive link, and removed `--level`, `--expand`, `--no-follow`.
+  **Fix:** `npx vercel link --yes --project <name>`; `npx vercel logs --environment production --query 'level:error' --since 15m`. The CLI also appends `.env*` to `.gitignore` on link, which overrides `!.env.example`; keep only `.vercel`.

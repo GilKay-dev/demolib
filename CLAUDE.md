@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Stage 3 in progress (npm workspaces `client` + `server`). Done: 2.1.1 register, 2.1.2 login; 2.1.3 profile, 2.2.1 categories, 2.2.2 add book (merged); 2.2.3 book list (merged); 2.2.4 book detail (merged); 2.2.5 edit/delete book (merged); 2.3.1 reader borrow request (merged); 2.3.2 staff confirm/reject (merged); 2.3.3 borrow history + renew (merged); 2.4.1 reader return request (merged); 2.4.2 staff confirm return (merged); 2.5.1 fine levels admin (merged); 2.5.2 reader fines view + mark paid (merged); 2.5.3 staff confirm/reject fines (merged); 2.6.1 user list + activate/disable (merged); 2.6.2 assign role (merged); 2.7.1 dashboard (merged); 2.7.2 detailed reports (on `feature/detailed-reports`, not merged yet). Track per-feature status in the PRD's "Trạng thái" column.
+Stage 3 in progress (npm workspaces `client` + `server`). Done: 2.1.1 register, 2.1.2 login; 2.1.3 profile, 2.2.1 categories, 2.2.2 add book (merged); 2.2.3 book list (merged); 2.2.4 book detail (merged); 2.2.5 edit/delete book (merged); 2.3.1 reader borrow request (merged); 2.3.2 staff confirm/reject (merged); 2.3.3 borrow history + renew (merged); 2.4.1 reader return request (merged); 2.4.2 staff confirm return (merged); 2.5.1 fine levels admin (merged); 2.5.2 reader fines view + mark paid (merged); 2.5.3 staff confirm/reject fines (merged); 2.6.1 user list + activate/disable (merged); 2.6.2 assign role (merged); 2.7.1 dashboard (merged); 2.7.2 detailed reports (merged). Stage 4 deployed: production at https://library-lending-iota.vercel.app (Vercel project `gpa13/library-lending`, auto-deploys on push to `main`). Track per-feature status in the PRD's "Trạng thái" column.
 
 The full spec is `.claude/PRD.md` (written in Vietnamese). Read it before implementing any feature; feature codes like `2.3.1` refer to its sections.
 
@@ -75,7 +75,10 @@ The project follows Waterfall: finish each stage before starting the next.
    - After implementing a feature, test it with: unit tests, API tests (Postman via the Postman MCP — not installed yet), and E2E tests (Playwright via the Playwright MCP — not installed yet).
    - Merge into `main` (`/merge`) only after the tests pass and the feature has been reviewed.
    - Update the "Trạng thái" column in `.claude/PRD.md` when a feature is completed.
-4. **Stage 4 — Deployment:** deploy to Vercel using the Vercel MCP (not installed yet).
+4. **Stage 4 — Deployment:** done. One Vercel project serves both workspaces: `vercel.json` builds `client` (output `client/dist`), rewrites `/api/*` to `api/index.js` (which re-exports the Express `app` as a serverless function) and everything else to `index.html`.
+   - Production env vars (set with `npx vercel env add NAME --environment production --value "..." --yes`; add `--force` to overwrite; redeploy afterwards): `DATABASE_URL`, `JWT_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TRUST_PROXY=1`, `CLIENT_URL`.
+   - Deploy by pushing to `main`, or manually with `npx vercel deploy --prod --yes`. Check the API with `npx vercel curl <url>/api/health` (Deployment Protection is on) and logs with `npx vercel logs --environment production --since 15m`.
+   - `vercel.json` must keep `functions."api/index.js".includeFiles = "server/src/generated/**"`, otherwise the gitignored Prisma client is missing at runtime.
 
 If a stage needs an MCP that isn't installed yet (Postman, Playwright, Vercel), ask the user to install it instead of working around it.
 
@@ -92,6 +95,7 @@ Keep this section current (the `/wrap-up` command updates it). Only level 1–2 
 - `server/prisma/schema.prisma` + `server/prisma.config.ts` — Prisma 7 schema mirroring the migrations (no `prisma migrate`; partial/expression indexes, CHECKs, triggers live only in SQL)
 - `server/src/routes/`, `validators/`, `middleware/validate.js`, `middleware/auth.js` (`authenticate`, `optionalAuthenticate`, `requireRole`), `middleware/rateLimit.js` (login / password-change limiters), `lib/token.js` (JWT carries a password fingerprint `pv`, so a password change revokes old tokens), `lib/password.js`, `test/auth.js` (token helper for tests) — route modules (+ tests), Joi schemas, validation + JWT auth/role middleware, token signing, bcrypt helpers
 - `client/src/pages/`, `components/` (`Field`, `RequireAuth`), `context/AuthContext.jsx`, `lib/api.js` — pages (+ tests), shared form/route-guard components, auth state (token in localStorage; 401 → logout), Axios instance
+- `vercel.json` + `api/index.js` — Vercel deploy config and the serverless entry that exports the Express app
 - `.claude/commands/` — project slash commands (commit, git-branch, merge, pull, push, wrap-up, learn-by-mistake, new-project)
 - `.mcp.json` — MCP server config (Supabase, Playwright, Postman, Vercel)
 - `common_errors.md` — (created by `/learn-by-mistake`) log of past mistakes and fixes, grouped by category; check it before repeating similar work
