@@ -58,6 +58,7 @@ These invariants are easy to break when implementing features in isolation:
 - **Fine statuses:** Chưa thanh toán → (reader marks paid after bank transfer) Chờ xác nhận → librarian confirms paid or rejects with reason.
 - **Deletion guards:** a category can't be deleted while books reference it; a book can't be deleted while it has active borrows. Both require a confirmation step.
 - **Public endpoints:** book list (2.2.3: search by title/author, filter by category, sort, 10 per page) and book detail need no login; borrow history on book detail is librarian-only.
+- **Roles are separate, not nested:** only Librarian can manage categories and add/edit/delete books (Admin can't, and the menu/routes hide them); only Admin manages users, roles and fine levels; the borrow button (`BorrowPanel`) appears only to Reader on the book detail page. Admin can't change their own role or disable themself, so adding books needs a second account with the Librarian role.
 - Validation limits (field lengths, password 8–16 chars, ISBN-10/13, publish year 1900–current) are defined per feature in the PRD — enforce them in both Joi (backend) and React Hook Form (frontend).
 
 ## Development process (Waterfall)
@@ -78,6 +79,8 @@ The project follows Waterfall: finish each stage before starting the next.
 4. **Stage 4 — Deployment:** done. One Vercel project serves both workspaces: `vercel.json` builds `client` (output `client/dist`), rewrites `/api/*` to `api/index.js` (which re-exports the Express `app` as a serverless function) and everything else to `index.html`.
    - Production env vars (set with `npx vercel env add NAME --environment production --value "..." --yes`; add `--force` to overwrite; redeploy afterwards): `DATABASE_URL`, `JWT_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `TRUST_PROXY=1`, `CLIENT_URL`.
    - Deploy by pushing to `main`, or manually with `npx vercel deploy --prod --yes`. Check the API with `npx vercel curl <url>/api/health` (Deployment Protection is on) and logs with `npx vercel logs --environment production --since 15m`.
+   - First Admin: registration always creates a pending Reader and only an Admin can activate it, so on a fresh database promote one account in the Supabase SQL Editor: `update users set role = 'ADMIN', status = 'ACTIVE' where email = '<email>';` (table is `users`). Then Admin activates other sign-ups and assigns the Librarian role in "Quản lý người dùng".
+   - Changing `JWT_SECRET` invalidates all existing logins (everyone must sign in again).
    - `vercel.json` must keep `functions."api/index.js".includeFiles = "server/src/generated/**"`, otherwise the gitignored Prisma client is missing at runtime.
 
 If a stage needs an MCP that isn't installed yet (Postman, Playwright, Vercel), ask the user to install it instead of working around it.
@@ -95,6 +98,7 @@ Keep this section current (the `/wrap-up` command updates it). Only level 1–2 
 - `server/prisma/schema.prisma` + `server/prisma.config.ts` — Prisma 7 schema mirroring the migrations (no `prisma migrate`; partial/expression indexes, CHECKs, triggers live only in SQL)
 - `server/src/routes/`, `validators/`, `middleware/validate.js`, `middleware/auth.js` (`authenticate`, `optionalAuthenticate`, `requireRole`), `middleware/rateLimit.js` (login / password-change limiters), `lib/token.js` (JWT carries a password fingerprint `pv`, so a password change revokes old tokens), `lib/password.js`, `test/auth.js` (token helper for tests) — route modules (+ tests), Joi schemas, validation + JWT auth/role middleware, token signing, bcrypt helpers
 - `client/src/pages/`, `components/` (`Field`, `RequireAuth`), `context/AuthContext.jsx`, `lib/api.js` — pages (+ tests), shared form/route-guard components, auth state (token in localStorage; 401 → logout), Axios instance
+- `client/src/index.css` — Tailwind import plus the soft light palette and an automatic dark mode (`prefers-color-scheme`) that overrides the hard-coded `slate`/`bg-white` utility classes; new pages using other fixed colors may need an override there
 - `vercel.json` + `api/index.js` — Vercel deploy config and the serverless entry that exports the Express app
 - `.claude/commands/` — project slash commands (commit, git-branch, merge, pull, push, wrap-up, learn-by-mistake, new-project)
 - `.mcp.json` — MCP server config (Supabase, Playwright, Postman, Vercel)
