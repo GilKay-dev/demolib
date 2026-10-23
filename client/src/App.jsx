@@ -8,6 +8,7 @@ import BookList from './pages/BookList'
 import BorrowRequests from './pages/BorrowRequests'
 import Categories from './pages/Categories'
 import Dashboard from './pages/Dashboard'
+import DetailReports from './pages/DetailReports'
 import FineConfirmations from './pages/FineConfirmations'
 import FineLevels from './pages/FineLevels'
 import Login from './pages/Login'
@@ -37,7 +38,10 @@ function Home() {
             </>
           )}
           {(user.role === 'LIBRARIAN' || user.role === 'ADMIN') && (
-            <Link to="/dashboard" className={linkClass}>Báo cáo tổng quan</Link>
+            <>
+              <Link to="/dashboard" className={linkClass}>Báo cáo tổng quan</Link>
+              <Link to="/reports" className={linkClass}>Báo cáo chi tiết</Link>
+            </>
           )}
           {user.role === 'LIBRARIAN' && (
             <>
@@ -127,6 +131,14 @@ function App() {
         element={
           <RequireAuth roles={['LIBRARIAN', 'ADMIN']}>
             <Dashboard />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/reports"
+        element={
+          <RequireAuth roles={['LIBRARIAN', 'ADMIN']}>
+            <DetailReports />
           </RequireAuth>
         }
       />

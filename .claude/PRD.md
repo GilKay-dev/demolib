@@ -341,7 +341,7 @@ Bảng dưới đây mô tả các phụ thuộc giữa các tính năng. Tính 
 | 17 | Danh Sách Người Dùng | 2.6.1 | 2.1.2 | Cần đăng nhập với vai trò quản lý viên | ✅ Hoàn thành |
 | 18 | Gán Vai Trò | 2.6.2 | 2.1.2, 2.6.1 | Cần đăng nhập và có danh sách người dùng | ✅ Hoàn thành |
 | 19 | Báo Cáo Tổng Quan (Dashboard) | 2.7.1 | 2.1.2, 2.2.2, 2.3.1, 2.4.2 | Cần có dữ liệu sách, mượn, trả | ✅ Hoàn thành |
-| 20 | Báo Cáo Chi Tiết | 2.7.2 | 2.1.2, 2.7.1 | Cần có dashboard và dữ liệu đầy đủ | ⬜ Chưa làm |
+| 20 | Báo Cáo Chi Tiết | 2.7.2 | 2.1.2, 2.7.1 | Cần có dashboard và dữ liệu đầy đủ | ✅ Hoàn thành |
 
 ### Lưu ý về thứ tự triển khai:
 
